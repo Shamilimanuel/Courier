@@ -69,7 +69,8 @@ export default function PairScreen({ onPaired, onBack }) {
     setScannerOpen(false);
     const parsed = parsePairingCode(data);
     if (!parsed) {
-      setError("That QR code isn't a Courier pairing code.");
+      const preview = String(data).slice(0, 90);
+      setError(`That QR code isn't a Courier pairing code. Scanned: "${preview}"`);
       return;
     }
     setIp(parsed.ip);
