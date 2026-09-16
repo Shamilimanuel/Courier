@@ -247,9 +247,7 @@ function Test-Agent {
         try {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($config.port)/health" -TimeoutSec 3 -UseBasicParsing
             if ($r.StatusCode -eq 200) {
-                $health = $r.Content | ConvertFrom-Json
-                $health | Add-Member -NotePropertyName token -NotePropertyValue $config.token
-                return $health
+                return $r.Content | ConvertFrom-Json
             }
         } catch { }
         Start-Sleep -Milliseconds 500
@@ -392,10 +390,8 @@ Write-Dim "  cd `"$InstallDir`"; node src\pair.js"
 Write-Host ''
 
 if (-not $NoPair) {
-    Write-Step 'Pairing details:'
+    Write-Step 'Scan this with the app to pair, or enter the details by hand:'
     Write-Host ''
-    $primary = $health.interfaces | Select-Object -First 1
-    if ($primary) { Write-Host "  Address: $($primary.ip):$($health.port)" -ForegroundColor White }
-    Write-Host "  Token:   $($health.token)" -ForegroundColor White
-    Write-Host ''
+    Push-Location $InstallDir
+    try { & $nodePath 'src\pair.js' } finally { Pop-Location }
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
 import { ClayField, ClayButton, IconButton } from "../components/Clay";
+import QRScanner from "../components/QRScanner";
 import { addDevice } from "../lib/pairing";
 import { checkHealth, ApiError } from "../lib/api";
 import { BackIcon } from "../components/icons";
@@ -13,24 +14,44 @@ export default function PairScreen({ onPaired, onBack }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
-  async function handlePair() {
+  async function attemptPair(draft) {
     setError(null);
-    if (!ip.trim() || !port.trim() || !token.trim()) {
+    if (!draft.ip.trim() || !draft.port.trim() || !draft.token.trim()) {
       setError("Fill in the PC's address, port, and token.");
       return;
     }
-    const draft = { ip: ip.trim(), port: port.trim(), token: token.trim() };
+    const clean = { ip: draft.ip.trim(), port: String(draft.port).trim(), token: draft.token.trim() };
     setBusy(true);
     try {
-      const health = await checkHealth(draft);
-      const device = await addDevice({ ...draft, hostname: health.hostname });
+      const health = await checkHealth(clean);
+      const device = await addDevice({ ...clean, hostname: health.hostname });
       onPaired(device);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not connect.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleScanned(data) {
+    setScannerOpen(false);
+    let parsed;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      setError("That QR code isn't a Courier pairing code.");
+      return;
+    }
+    if (!parsed.ip || !parsed.port || !parsed.token) {
+      setError("That QR code isn't a Courier pairing code.");
+      return;
+    }
+    setIp(parsed.ip);
+    setPort(String(parsed.port));
+    setToken(parsed.token);
+    attemptPair(parsed);
   }
 
   return (
@@ -50,9 +71,13 @@ export default function PairScreen({ onPaired, onBack }) {
         {onBack ? "Add a PC" : "Pair with your PC"}
       </Text>
       <Text style={[styles.subtitle, { color: theme.ink2 }]}>
-        Run `npm run pair` in the Courier agent folder on that PC, then enter
-        what it shows here.
+        Run the Courier installer or `npm run pair` on that PC, then scan the
+        code it shows — or enter the details by hand below.
       </Text>
+
+      <View style={styles.scanWrap}>
+        <ClayButton label="Scan QR code" tone="accent" onPress={() => setScannerOpen(true)} />
+      </View>
 
       <Text style={[styles.label, { color: theme.ink2 }]}>PC address</Text>
       <ClayField
@@ -85,8 +110,10 @@ export default function PairScreen({ onPaired, onBack }) {
       {error ? <Text style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
 
       <View style={styles.buttonWrap}>
-        <ClayButton label="Pair" tone="accent" onPress={handlePair} busy={busy} />
+        <ClayButton label="Pair" onPress={() => attemptPair({ ip, port, token })} busy={busy} />
       </View>
+
+      <QRScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={handleScanned} />
     </KeyboardAvoidingView>
   );
 }
@@ -95,7 +122,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: "center" },
   backRow: { position: "absolute", top: 56, left: 24 },
   title: { fontSize: 22, fontWeight: "800", marginBottom: 8 },
-  subtitle: { fontSize: 13, lineHeight: 19, marginBottom: 22 },
+  subtitle: { fontSize: 13, lineHeight: 19, marginBottom: 20 },
+  scanWrap: { marginBottom: 22 },
   label: { fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 14 },
   error: { fontSize: 12.5, fontWeight: "700", marginTop: 16 },
   buttonWrap: { marginTop: 22 },
