@@ -8,17 +8,25 @@ import { checkHealth, ApiError } from "../lib/api";
 import { BackIcon } from "../components/icons";
 
 /** The agent's QR encodes a URL (so any camera app can open it); parse the
- * pairing fields from its query string. Falls back to the older raw-JSON
+ * pairing fields out of its query string by hand rather than with the `URL`
+ * API — Hermes doesn't reliably provide a working `URL`/`URLSearchParams`,
+ * and a silent failure there means every scan looks like "not a pairing
+ * code" instead of actually parsing. Falls back to the older raw-JSON
  * format in case an agent hasn't been updated yet. */
 function parsePairingCode(data) {
-  try {
-    const url = new URL(data);
-    const ip = url.searchParams.get("ip");
-    const port = url.searchParams.get("port");
-    const token = url.searchParams.get("token");
-    if (ip && port && token) return { ip, port, token };
-  } catch {
-    // not a URL — fall through to the legacy format
+  const queryIndex = data.indexOf("?");
+  if (queryIndex !== -1) {
+    const params = {};
+    data
+      .slice(queryIndex + 1)
+      .split("&")
+      .forEach((pair) => {
+        const [key, value] = pair.split("=");
+        if (key) params[decodeURIComponent(key)] = decodeURIComponent(value || "");
+      });
+    if (params.ip && params.port && params.token) {
+      return { ip: params.ip, port: params.port, token: params.token };
+    }
   }
   try {
     const parsed = JSON.parse(data);

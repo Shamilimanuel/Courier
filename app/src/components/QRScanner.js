@@ -53,6 +53,10 @@ export default function QRScanner({ visible, onClose, onScanned }) {
             <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
           </IconButton>
         </View>
+
+        <Pressable style={styles.manualRow} onPress={onClose} hitSlop={10}>
+          <Text style={styles.manualText}>Can't scan it? Enter the details by hand</Text>
+        </Pressable>
       </View>
     </Modal>
   );
@@ -93,4 +97,14 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   permissionText: { color: "#fff", fontSize: 14, textAlign: "center", lineHeight: 20 },
+
+  manualRow: {
+    position: "absolute",
+    bottom: 40,
+    left: 24,
+    right: 24,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  manualText: { color: "rgba(255,255,255,0.65)", fontSize: 13.5, fontWeight: "600" },
 });
