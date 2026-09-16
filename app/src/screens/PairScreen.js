@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
-import { ClayField, ClayButton } from "../components/Clay";
-import { savePairing } from "../lib/pairing";
+import { ClayField, ClayButton, IconButton } from "../components/Clay";
+import { addDevice } from "../lib/pairing";
 import { checkHealth, ApiError } from "../lib/api";
+import { BackIcon } from "../components/icons";
 
-export default function PairScreen({ onPaired }) {
+export default function PairScreen({ onPaired, onBack }) {
   const { theme } = useTheme();
   const [ip, setIp] = useState("");
   const [port, setPort] = useState("5544");
@@ -19,12 +20,12 @@ export default function PairScreen({ onPaired }) {
       setError("Fill in the PC's address, port, and token.");
       return;
     }
-    const pairing = { ip: ip.trim(), port: port.trim(), token: token.trim() };
+    const draft = { ip: ip.trim(), port: port.trim(), token: token.trim() };
     setBusy(true);
     try {
-      const health = await checkHealth(pairing);
-      await savePairing({ ...pairing, hostname: health.hostname });
-      onPaired({ ...pairing, hostname: health.hostname });
+      const health = await checkHealth(draft);
+      const device = await addDevice({ ...draft, hostname: health.hostname });
+      onPaired(device);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not connect.");
     } finally {
@@ -37,9 +38,19 @@ export default function PairScreen({ onPaired }) {
       style={[styles.container, { backgroundColor: theme.ground }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={[styles.title, { color: theme.ink }]}>Pair with your PC</Text>
+      {onBack && (
+        <View style={styles.backRow}>
+          <IconButton accessibilityLabel="Back" onPress={onBack}>
+            <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
+          </IconButton>
+        </View>
+      )}
+
+      <Text style={[styles.title, { color: theme.ink }]}>
+        {onBack ? "Add a PC" : "Pair with your PC"}
+      </Text>
       <Text style={[styles.subtitle, { color: theme.ink2 }]}>
-        Run `npm run pair` in the Courier agent folder on your PC, then enter
+        Run `npm run pair` in the Courier agent folder on that PC, then enter
         what it shows here.
       </Text>
 
@@ -82,6 +93,7 @@ export default function PairScreen({ onPaired }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: "center" },
+  backRow: { position: "absolute", top: 56, left: 24 },
   title: { fontSize: 22, fontWeight: "800", marginBottom: 8 },
   subtitle: { fontSize: 13, lineHeight: 19, marginBottom: 22 },
   label: { fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 14 },

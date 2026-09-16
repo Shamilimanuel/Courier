@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from "react-native";
 import { useTheme } from "../theme/ThemeContext";
-import { raised, filled, RADIUS } from "../theme/clay";
-import { ClayButton, IconButton, StatusPill, CategoryTile } from "../components/Clay";
+import { raised, sunken, filled, RADIUS } from "../theme/clay";
+import { ClayButton, IconButton, CategoryTile } from "../components/Clay";
 import { CATEGORY_ICONS, KebabIcon, SignalIcon } from "../components/icons";
-import { clearPairing } from "../lib/pairing";
+import { removeDevice } from "../lib/pairing";
+import { pingHealth } from "../lib/api";
 import { getHistory } from "../lib/history";
 import { formatBytes } from "../lib/upload";
 
@@ -25,20 +26,33 @@ function relativeTime(at) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export default function HomeScreen({ pairing, onNavigate, onUnpair }) {
+export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAddDevice, onDevicesChanged, onNavigate }) {
   const { theme } = useTheme();
   const [tab, setTab] = useState("send");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [history, setHistory] = useState([]);
+  const [online, setOnline] = useState({});
 
   useEffect(() => {
     getHistory().then(setHistory);
   }, []);
 
-  async function handleUnpair() {
+  useEffect(() => {
+    let cancelled = false;
+    devices.forEach((d) => {
+      pingHealth(d).then((ok) => {
+        if (!cancelled) setOnline((current) => ({ ...current, [d.id]: ok }));
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [devices]);
+
+  async function handleForget() {
     setConfirmOpen(false);
-    await clearPairing();
-    onUnpair();
+    const remaining = await removeDevice(activeDevice.id);
+    onDevicesChanged(remaining);
   }
 
   return (
@@ -48,15 +62,45 @@ export default function HomeScreen({ pairing, onNavigate, onUnpair }) {
           <View style={[styles.brandMark, filled(theme, theme.dusk, theme.duskDeep)]}>
             <Text style={[styles.brandMarkText, { color: theme.onFill }]}>C</Text>
           </View>
-          <View>
-            <Text style={[styles.brandName, { color: theme.ink }]}>Courier</Text>
-            <StatusPill label={pairing.hostname || pairing.ip} />
-          </View>
+          <Text style={[styles.brandName, { color: theme.ink }]}>Courier</Text>
         </View>
         <IconButton accessibilityLabel="Settings" onPress={() => setConfirmOpen(true)}>
           <KebabIcon size={17} color={theme.ink2} strokeWidth={1.8} />
         </IconButton>
       </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deviceRow}>
+        {devices.map((d) => {
+          const isActive = d.id === activeDevice.id;
+          const isOnline = online[d.id];
+          return (
+            <Pressable
+              key={d.id}
+              onPress={() => onSwitchDevice(d.id)}
+              style={[
+                styles.deviceChip,
+                isActive ? [filled(theme, theme.dusk, theme.duskDeep)] : raised(theme, 0.8),
+              ]}
+            >
+              <View
+                style={[
+                  styles.deviceDot,
+                  { backgroundColor: isOnline == null ? theme.ink3 : isOnline ? theme.moss : theme.danger },
+                ]}
+              />
+              <Text
+                style={[styles.deviceChipText, { color: isActive ? theme.onFill : theme.ink }]}
+                numberOfLines={1}
+              >
+                {d.hostname}
+              </Text>
+            </Pressable>
+          );
+        })}
+        <Pressable onPress={onAddDevice} style={[styles.deviceChip, sunken(theme, 0.7)]}>
+          <Text style={[styles.deviceChipText, { color: theme.ink2 }]}>+ Add PC</Text>
+        </Pressable>
+      </ScrollView>
 
       <View style={[styles.tabs, { backgroundColor: theme.clayLo }]}>
         <Pressable
@@ -108,9 +152,14 @@ export default function HomeScreen({ pairing, onNavigate, onUnpair }) {
                     <Text style={[styles.recentName, { color: theme.ink }]} numberOfLines={1}>
                       {entry.name}
                     </Text>
-                    <Text style={[styles.recentMeta, { color: theme.ink3 }]}>
+                    <Text style={[styles.recentMeta, { color: theme.ink3 }]} numberOfLines={1}>
                       {formatBytes(entry.size || 0)} · {relativeTime(entry.at)}
                     </Text>
+                    {entry.hostname && (
+                      <Text style={[styles.recentTarget, { color: theme.ink3 }]} numberOfLines={1}>
+                        → {entry.hostname}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
@@ -133,14 +182,16 @@ export default function HomeScreen({ pairing, onNavigate, onUnpair }) {
       <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
         <View style={styles.veil}>
           <View style={[styles.sheet, { backgroundColor: theme.ground }]}>
-            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Unpair</Text>
-            <Text style={[styles.sheetSub, { color: theme.ink2 }]}>Forget this PC?</Text>
+            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Forget this PC</Text>
+            <Text style={[styles.sheetSub, { color: theme.ink2 }]}>
+              Remove {activeDevice.hostname} from your paired devices?
+            </Text>
             <View style={styles.sheetRow}>
               <View style={{ flex: 1 }}>
                 <ClayButton label="Cancel" onPress={() => setConfirmOpen(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <ClayButton label="Unpair" tone="danger" onPress={handleUnpair} />
+                <ClayButton label="Forget" tone="danger" onPress={handleForget} />
               </View>
             </View>
           </View>
@@ -152,11 +203,24 @@ export default function HomeScreen({ pairing, onNavigate, onUnpair }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 22, paddingTop: 56 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   brandMarkText: { fontWeight: "900", fontSize: 15 },
   brandName: { fontWeight: "800", fontSize: 17 },
+
+  deviceRow: { gap: 8, paddingBottom: 4, marginBottom: 14 },
+  deviceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    maxWidth: 160,
+  },
+  deviceDot: { width: 7, height: 7, borderRadius: 4 },
+  deviceChipText: { fontWeight: "800", fontSize: 12.5 },
 
   tabs: { flexDirection: "row", gap: 4, padding: 4, borderRadius: 16, marginBottom: 18 },
   tab: { flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: "center" },
@@ -173,6 +237,7 @@ const styles = StyleSheet.create({
   recentIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   recentName: { fontSize: 11.5, fontWeight: "800" },
   recentMeta: { fontSize: 10, fontWeight: "600", marginTop: 2 },
+  recentTarget: { fontSize: 9.5, fontWeight: "600", marginTop: 1 },
 
   receivePane: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   radarCore: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 18 },

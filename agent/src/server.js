@@ -47,10 +47,22 @@ function createServer(config) {
   }
 
   app.get("/health", (req, res) => {
+    const interfaces = [];
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        if (net.family === "IPv4" && !net.internal) {
+          interfaces.push({ interface: name, ip: net.address });
+        }
+      }
+    }
+
     res.json({
       hostname: os.hostname(),
       uptime: os.uptime(),
       platform: os.platform(),
+      port: config.port,
+      interfaces,
     });
   });
 

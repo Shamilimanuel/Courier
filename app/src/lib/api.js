@@ -39,6 +39,20 @@ export function checkHealth(pairing) {
   return request(pairing, "/health");
 }
 
+/** A short-timeout health check for "is this device online" — doesn't throw. */
+export async function pingHealth(pairing, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${baseUrl(pairing)}/health`, { signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function getClipboard(pairing) {
   return request(pairing, "/clipboard").then((r) => r.text);
 }
