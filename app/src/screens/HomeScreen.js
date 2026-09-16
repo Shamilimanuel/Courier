@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking } from "react-native";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useTheme } from "../theme/ThemeContext";
 import { raised, sunken, filled, RADIUS } from "../theme/clay";
 import { ClayButton, IconButton, CategoryTile } from "../components/Clay";
 import { CATEGORY_ICONS, KebabIcon, SignalIcon, CheckIcon } from "../components/icons";
+import UpdateBanner from "../components/UpdateBanner";
 import { removeDevice } from "../lib/pairing";
 import { pingHealth, listFiles, deleteFile, fileDownloadUrl, ApiError } from "../lib/api";
 import { getHistory, addHistoryEntry } from "../lib/history";
 import { formatBytes } from "../lib/upload";
+import { checkForUpdateDetailed, installedVersionLabel } from "../lib/updates";
 
 const CATEGORIES = [
   { key: "file", label: "File" },
@@ -38,6 +40,8 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   const [filesError, setFilesError] = useState(null);
   const [busyFile, setBusyFile] = useState(null);
   const [savedFiles, setSavedFiles] = useState({});
+  const [updateState, setUpdateState] = useState("idle");
+  const [updateResult, setUpdateResult] = useState(null);
 
   useEffect(() => {
     getHistory().then(setHistory);
@@ -113,6 +117,14 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
     onDevicesChanged(remaining);
   }
 
+  async function handleCheckUpdate() {
+    setUpdateState("checking");
+    setUpdateResult(null);
+    const outcome = await checkForUpdateDetailed();
+    setUpdateResult(outcome);
+    setUpdateState("idle");
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.ground }]}>
       <View style={styles.header}>
@@ -126,6 +138,8 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
           <KebabIcon size={17} color={theme.ink2} strokeWidth={1.8} />
         </IconButton>
       </View>
+
+      <UpdateBanner />
 
       <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Your stops</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deviceRow}>
@@ -295,16 +309,60 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
       <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
         <View style={styles.veil}>
           <View style={[styles.sheet, { backgroundColor: theme.ground }]}>
-            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Remove this stop</Text>
-            <Text style={[styles.sheetSub, { color: theme.ink2 }]}>
+            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Settings</Text>
+
+            <View style={[styles.updateCard, sunken(theme, 0.7)]}>
+              <Text style={[styles.updateLine, { color: theme.ink }]}>
+                Courier {installedVersionLabel()}
+              </Text>
+              {updateResult ? (
+                <Text
+                  style={[
+                    styles.updateStatus,
+                    {
+                      color:
+                        updateResult.state === "available"
+                          ? theme.dusk
+                          : updateResult.state === "error"
+                          ? theme.danger
+                          : theme.moss,
+                    },
+                  ]}
+                >
+                  {updateResult.state === "current"
+                    ? "You're up to date"
+                    : updateResult.state === "available"
+                    ? `${updateResult.info.version} is available`
+                    : updateResult.reason}
+                </Text>
+              ) : (
+                <Text style={[styles.updateHint, { color: theme.ink3 }]}>Also checks itself on open</Text>
+              )}
+              <ClayButton
+                label={updateState === "checking" ? "Checking…" : "Check for updates"}
+                busy={updateState === "checking"}
+                onPress={handleCheckUpdate}
+                style={{ marginTop: 10 }}
+              />
+              {updateResult?.state === "available" && (
+                <ClayButton
+                  label={`Download ${updateResult.info.version}`}
+                  tone="accent"
+                  onPress={() => Linking.openURL(updateResult.info.downloadUrl)}
+                  style={{ marginTop: 8 }}
+                />
+              )}
+            </View>
+
+            <Text style={[styles.sheetSub, { marginTop: 18, color: theme.ink2 }]}>
               Remove {activeDevice.hostname} from your stops?
             </Text>
             <View style={styles.sheetRow}>
               <View style={{ flex: 1 }}>
-                <ClayButton label="Cancel" onPress={() => setConfirmOpen(false)} />
+                <ClayButton label="Close" onPress={() => setConfirmOpen(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <ClayButton label="Remove" tone="danger" onPress={handleForget} />
+                <ClayButton label="Remove stop" tone="danger" onPress={handleForget} />
               </View>
             </View>
           </View>
@@ -363,6 +421,11 @@ const styles = StyleSheet.create({
   fileActions: { flexDirection: "row", gap: 6 },
   fileBtn: { width: 78, paddingVertical: 9 },
   checkDot: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+
+  updateCard: { borderRadius: 16, padding: 14, marginTop: 4 },
+  updateLine: { fontWeight: "800", fontSize: 14 },
+  updateStatus: { fontSize: 12, fontWeight: "700", marginTop: 4 },
+  updateHint: { fontSize: 11.5, fontWeight: "600", marginTop: 4 },
 
   veil: { flex: 1, backgroundColor: "rgba(20,14,30,0.4)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: RADIUS.sheet, borderTopRightRadius: RADIUS.sheet, padding: 22, paddingBottom: 34 },
