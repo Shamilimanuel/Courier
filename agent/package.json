@@ -1,0 +1,15 @@
+{
+  "name": "courier-agent",
+  "version": "0.1.0",
+  "description": "PC-side agent for Courier — syncs clipboard/text/files with the phone app",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "pair": "node src/pair.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.4.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

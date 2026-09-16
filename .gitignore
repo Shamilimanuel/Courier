@@ -1,0 +1,21 @@
+node_modules/
+agent/config.json
+agent/tmp/
+
+# OneDrive / Windows
+desktop.ini
+Thumbs.db
+
+# Expo / React Native
+app/.expo/
+app/node_modules/
+app/android/
+app/ios/
+app/dist/
+*.apk
+*.aab
+
+# App signing key — never commit, see secrets/READ-ME-FIRST.txt
+secrets/
+*.jks
+*.keystore
