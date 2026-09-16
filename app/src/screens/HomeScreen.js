@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking } from "react-native";
+import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useTheme } from "../theme/ThemeContext";
 import { raised, sunken, filled, RADIUS } from "../theme/clay";
 import { ClayButton, IconButton, CategoryTile } from "../components/Clay";
-import { CATEGORY_ICONS, KebabIcon, SignalIcon, CheckIcon } from "../components/icons";
+import { CATEGORY_ICONS, KebabIcon, SignalIcon, CheckIcon, RefreshIcon } from "../components/icons";
 import UpdateBanner from "../components/UpdateBanner";
 import { removeDevice } from "../lib/pairing";
 import { pingHealth, listFiles, deleteFile, fileDownloadUrl, ApiError } from "../lib/api";
 import { getHistory, addHistoryEntry } from "../lib/history";
-import { formatBytes } from "../lib/upload";
+import { uploadFile, formatBytes } from "../lib/upload";
 import { checkForUpdateDetailed, installedVersionLabel } from "../lib/updates";
 
 const CATEGORIES = [
@@ -43,6 +43,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   const [savedFiles, setSavedFiles] = useState({});
   const [updateState, setUpdateState] = useState("idle");
   const [updateResult, setUpdateResult] = useState(null);
+  const [resendingAt, setResendingAt] = useState(null);
 
   useEffect(() => {
     getHistory().then(setHistory);
@@ -124,6 +125,40 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
     const outcome = await checkForUpdateDetailed();
     setUpdateResult(outcome);
     setUpdateState("idle");
+  }
+
+  async function handleResend(entry) {
+    if (!entry.uri) {
+      Alert.alert("Courier", "Can't resend that — the original file isn't around anymore.");
+      return;
+    }
+    setResendingAt(entry.at);
+    const asset = { uri: entry.uri, name: entry.name, mimeType: entry.mimeType, size: entry.size };
+    try {
+      let { promise } = uploadFile(activeDevice, asset, {});
+      let result = await promise;
+      if (result.duplicate) {
+        ({ promise } = uploadFile(activeDevice, asset, { onDuplicate: "rename" }));
+        result = await promise;
+      }
+      await addHistoryEntry({
+        name: result.name || entry.name,
+        size: result.size || entry.size,
+        category: entry.category,
+        direction: "sent",
+        hostname: activeDevice.hostname || activeDevice.ip,
+        uri: entry.uri,
+        mimeType: entry.mimeType,
+      });
+      setHistory(await getHistory());
+    } catch (err) {
+      Alert.alert(
+        "Courier",
+        err?.message || "Couldn't resend — the original file isn't available anymore."
+      );
+    } finally {
+      setResendingAt(null);
+    }
   }
 
   return (
@@ -228,10 +263,28 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
             >
               {history.slice(0, 8).map((entry, i) => {
                 const { Icon, color } = CATEGORY_ICONS[entry.category] || CATEGORY_ICONS.file;
+                const canResend = entry.direction === "sent" && entry.uri;
+                const resending = resendingAt === entry.at;
                 return (
                   <View key={i} style={[styles.recentChip, raised(theme, 0.8)]}>
-                    <View style={[styles.recentIcon, { backgroundColor: color }]}>
-                      <Icon size={14} color="#FFFFFF" strokeWidth={1.8} />
+                    <View style={styles.recentTopRow}>
+                      <View style={[styles.recentIcon, { backgroundColor: color }]}>
+                        <Icon size={14} color="#FFFFFF" strokeWidth={1.8} />
+                      </View>
+                      {canResend && (
+                        <Pressable
+                          onPress={() => handleResend(entry)}
+                          disabled={resending}
+                          hitSlop={8}
+                          accessibilityLabel={`Resend ${entry.name}`}
+                        >
+                          {resending ? (
+                            <ActivityIndicator size="small" color={theme.ink3} />
+                          ) : (
+                            <RefreshIcon size={14} color={theme.ink3} strokeWidth={2} />
+                          )}
+                        </Pressable>
+                      )}
                     </View>
                     <Text style={[styles.recentName, { color: theme.ink }]} numberOfLines={1}>
                       {entry.name}
@@ -419,7 +472,8 @@ const styles = StyleSheet.create({
   recentScroll: { flexGrow: 0 },
   recentRow: { gap: 10, paddingRight: 4, alignItems: "center" },
   recentChip: { width: 118, borderRadius: 16, padding: 10, alignSelf: "flex-start" },
-  recentIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  recentTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  recentIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   recentName: { fontSize: 11.5, fontWeight: "800" },
   recentMeta: { fontSize: 10, fontWeight: "600", marginTop: 2 },
   recentTarget: { fontSize: 9.5, fontWeight: "600", marginTop: 1 },

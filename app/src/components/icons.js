@@ -82,6 +82,17 @@ export function CheckIcon(props) {
   );
 }
 
+export function RefreshIcon(props) {
+  return (
+    <Icon {...props}>
+      <Path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <Path d="M21 3v5h-5" />
+      <Path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <Path d="M3 21v-5h5" />
+    </Icon>
+  );
+}
+
 export function SignalIcon(props) {
   return (
     <Icon {...props}>

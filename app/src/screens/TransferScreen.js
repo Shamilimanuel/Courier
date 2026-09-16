@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
@@ -6,7 +6,7 @@ import { useTheme } from "../theme/ThemeContext";
 import { raised, sunken } from "../theme/clay";
 import { ClayButton, IconButton } from "../components/Clay";
 import { CATEGORY_ICONS, BackIcon, CheckIcon } from "../components/icons";
-import { uploadFile, formatBytes, formatEta } from "../lib/upload";
+import { uploadFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
 import { addHistoryEntry } from "../lib/history";
 
 const PICKER_TYPE = {
@@ -28,6 +28,7 @@ export default function TransferScreen({ category, pairing, onBack }) {
   const copy = COPY[category] || COPY.file;
   const { Icon, color } = CATEGORY_ICONS[category] || CATEGORY_ICONS.file;
   const [items, setItems] = useState([]);
+  const cancelFns = useRef({});
 
   function patchItem(id, patch) {
     setItems((current) => current.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -53,11 +54,13 @@ export default function TransferScreen({ category, pairing, onBack }) {
 
   async function upload(item, onDuplicate) {
     patchItem(item.id, { status: "uploading", error: null, progress: null });
+    const { promise, cancel } = uploadFile(pairing, item.asset, {
+      onDuplicate,
+      onProgress: (progress) => patchItem(item.id, { progress }),
+    });
+    cancelFns.current[item.id] = cancel;
     try {
-      const result = await uploadFile(pairing, item.asset, {
-        onDuplicate,
-        onProgress: (progress) => patchItem(item.id, { progress }),
-      });
+      const result = await promise;
       if (result.duplicate) {
         patchItem(item.id, { status: "duplicate", existingSize: result.existingSize });
         return;
@@ -69,22 +72,34 @@ export default function TransferScreen({ category, pairing, onBack }) {
         category,
         direction: "sent",
         hostname: pairing.hostname || pairing.ip,
+        uri: item.asset.uri,
+        mimeType: item.asset.mimeType,
       });
     } catch (err) {
-      patchItem(item.id, { status: "error", error: err.message });
+      if (err instanceof UploadCancelled) {
+        patchItem(item.id, { status: "cancelled" });
+      } else {
+        patchItem(item.id, { status: "error", error: err.message });
+      }
+    } finally {
+      delete cancelFns.current[item.id];
     }
+  }
+
+  function cancelUpload(item) {
+    cancelFns.current[item.id]?.();
   }
 
   async function sendAll() {
     for (const item of items) {
-      if (item.status === "pending" || item.status === "error") {
+      if (item.status === "pending" || item.status === "error" || item.status === "cancelled") {
         // eslint-disable-next-line no-await-in-loop
         await upload(item);
       }
     }
   }
 
-  const hasSendable = items.some((it) => it.status === "pending" || it.status === "error");
+  const hasSendable = items.some((it) => it.status === "pending" || it.status === "error" || it.status === "cancelled");
   const anyUploading = items.some((it) => it.status === "uploading");
 
   return (
@@ -107,7 +122,15 @@ export default function TransferScreen({ category, pairing, onBack }) {
       ) : (
         <ScrollView style={styles.list} contentContainerStyle={{ gap: 10, paddingVertical: 14 }}>
           {items.map((item) => (
-            <TransferItem key={item.id} item={item} color={color} Icon={Icon} onUpload={upload} theme={theme} />
+            <TransferItem
+              key={item.id}
+              item={item}
+              color={color}
+              Icon={Icon}
+              onUpload={upload}
+              onCancel={cancelUpload}
+              theme={theme}
+            />
           ))}
         </ScrollView>
       )}
@@ -123,7 +146,7 @@ export default function TransferScreen({ category, pairing, onBack }) {
   );
 }
 
-function TransferItem({ item, color, Icon, onUpload, theme }) {
+function TransferItem({ item, color, Icon, onUpload, onCancel, theme }) {
   return (
     <View style={[styles.item, raised(theme, 0.8)]}>
       <View style={styles.itemRow}>
@@ -154,7 +177,11 @@ function TransferItem({ item, color, Icon, onUpload, theme }) {
         </View>
       )}
 
-      {item.status === "error" && (
+      {item.status === "uploading" && (
+        <ClayButton label="Cancel" tone="danger" onPress={() => onCancel(item)} style={{ marginTop: 8 }} />
+      )}
+
+      {(item.status === "error" || item.status === "cancelled") && (
         <ClayButton label="Retry" onPress={() => onUpload(item)} style={{ marginTop: 8 }} />
       )}
 
@@ -186,6 +213,7 @@ function statusLine(item) {
   if (item.status === "uploading") return "Starting…";
   if (item.status === "done") return "Sent";
   if (item.status === "duplicate") return `Already exists on the PC (${formatBytes(item.existingSize)})`;
+  if (item.status === "cancelled") return "Cancelled";
   if (item.status === "error") return item.error || "Failed";
   return "";
 }
