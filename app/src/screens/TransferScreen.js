@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import { useTheme } from "../theme/ThemeContext";
 import { raised, sunken } from "../theme/clay";
@@ -87,7 +88,7 @@ export default function TransferScreen({ category, pairing, onBack }) {
   const anyUploading = items.some((it) => it.status === "uploading");
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.ground }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.ground }]} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <IconButton accessibilityLabel="Back" onPress={onBack}>
           <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
@@ -97,25 +98,28 @@ export default function TransferScreen({ category, pairing, onBack }) {
 
       <ClayButton label={`Choose ${copy.hint.toLowerCase()}`} onPress={pick} style={{ marginTop: 16 }} />
 
-      <ScrollView style={styles.list} contentContainerStyle={{ gap: 10, paddingVertical: 14 }}>
-        {items.map((item) => (
-          <TransferItem key={item.id} item={item} color={color} Icon={Icon} onUpload={upload} theme={theme} />
-        ))}
-      </ScrollView>
+      {items.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Text style={[styles.emptyText, { color: theme.ink3 }]}>
+            Nothing chosen yet — tap above to pick something to send.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.list} contentContainerStyle={{ gap: 10, paddingVertical: 14 }}>
+          {items.map((item) => (
+            <TransferItem key={item.id} item={item} color={color} Icon={Icon} onUpload={upload} theme={theme} />
+          ))}
+        </ScrollView>
+      )}
 
-      <View style={{ marginTop: "auto" }}>
-        <ClayButton
-          label={
-            anyUploading
-              ? "Sending…"
-              : `Send to ${pairing.hostname || pairing.ip}`
-          }
-          tone="accent"
-          onPress={sendAll}
-          disabled={!hasSendable || anyUploading}
-        />
-      </View>
-    </View>
+      <ClayButton
+        label={anyUploading ? "Sending…" : `Send to ${pairing.hostname || pairing.ip}`}
+        tone="accent"
+        onPress={sendAll}
+        disabled={!hasSendable || anyUploading}
+        style={{ marginTop: 12 }}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -187,10 +191,13 @@ function statusLine(item) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 22, paddingTop: 56 },
+  container: { flex: 1, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 16 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
   title: { fontWeight: "800", fontSize: 17 },
   list: { flex: 1 },
+
+  emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
+  emptyText: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 19 },
 
   item: { borderRadius: 16, padding: 12 },
   itemRow: { flexDirection: "row", alignItems: "center", gap: 10 },

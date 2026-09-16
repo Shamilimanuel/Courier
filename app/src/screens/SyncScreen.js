@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { useTheme } from "../theme/ThemeContext";
 import { ClayField, ClayButton, IconButton } from "../components/Clay";
@@ -56,7 +57,7 @@ export default function SyncScreen({ pairing, onBack }) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.ground }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.ground }]} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <IconButton accessibilityLabel="Back" onPress={onBack}>
           <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
@@ -83,12 +84,12 @@ export default function SyncScreen({ pairing, onBack }) {
         <ClayButton label="Get PC clipboard → phone" tone="accent" onPress={getFromPc} busy={busy} />
         <ClayButton label="Send text above → PC" onPress={sendTyped} busy={busy} />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 22, paddingTop: 56 },
+  container: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
   header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 },
   title: { fontWeight: "800", fontSize: 17 },
   subtitle: { fontSize: 11, fontWeight: "600", marginTop: 1 },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import { getDevices, getActiveDeviceId, setActiveDeviceId } from "./src/lib/pairing";
 import PairScreen from "./src/screens/PairScreen";
@@ -93,10 +94,12 @@ function Root() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <Root />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <Root />
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

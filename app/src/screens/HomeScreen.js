@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useTheme } from "../theme/ThemeContext";
@@ -126,7 +127,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.ground }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.ground }]} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <View style={styles.brand}>
           <View style={[styles.brandMark, filled(theme, theme.dusk, theme.duskDeep)]}>
@@ -142,7 +143,12 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
       <UpdateBanner />
 
       <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Your stops</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deviceRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.deviceScroll}
+        contentContainerStyle={styles.deviceRow}
+      >
         {devices.map((d) => {
           const isActive = d.id === activeDevice.id;
           const isOnline = online[d.id];
@@ -214,7 +220,12 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
               <Text style={[styles.emptyText, { color: theme.ink3 }]}>Nothing sent yet</Text>
             </View>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.recentScroll}
+              contentContainerStyle={styles.recentRow}
+            >
               {history.slice(0, 8).map((entry, i) => {
                 const { Icon, color } = CATEGORY_ICONS[entry.category] || CATEGORY_ICONS.file;
                 return (
@@ -368,22 +379,24 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 22, paddingTop: 56 },
+  container: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
   brandMark: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   brandMarkText: { fontWeight: "900", fontSize: 15 },
   brandName: { fontWeight: "800", fontSize: 17 },
 
-  deviceRow: { gap: 8, paddingBottom: 4, marginBottom: 18 },
+  deviceScroll: { flexGrow: 0, marginBottom: 18 },
+  deviceRow: { gap: 8, alignItems: "center" },
   deviceChip: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 7,
     paddingVertical: 9,
     paddingHorizontal: 14,
@@ -403,8 +416,9 @@ const styles = StyleSheet.create({
   emptyCard: { borderRadius: 16, paddingVertical: 22, alignItems: "center", justifyContent: "center" },
   emptyText: { fontSize: 12.5, fontWeight: "700" },
 
-  recentRow: { gap: 10, paddingRight: 4 },
-  recentChip: { width: 118, borderRadius: 16, padding: 10 },
+  recentScroll: { flexGrow: 0 },
+  recentRow: { gap: 10, paddingRight: 4, alignItems: "center" },
+  recentChip: { width: 118, borderRadius: 16, padding: 10, alignSelf: "flex-start" },
   recentIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   recentName: { fontSize: 11.5, fontWeight: "800" },
   recentMeta: { fontSize: 10, fontWeight: "600", marginTop: 2 },

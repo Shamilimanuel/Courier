@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeContext";
 import { ClayField, ClayButton, IconButton } from "../components/Clay";
 import QRScanner from "../components/QRScanner";
@@ -80,10 +81,11 @@ export default function PairScreen({ onPaired, onBack }) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.ground }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.ground }]} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
       {onBack && (
         <View style={styles.backRow}>
           <IconButton accessibilityLabel="Back" onPress={onBack}>
@@ -139,13 +141,15 @@ export default function PairScreen({ onPaired, onBack }) {
       </View>
 
       <QRScanner visible={scannerOpen} onClose={() => setScannerOpen(false)} onScanned={handleScanned} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
   container: { flex: 1, padding: 24, justifyContent: "center" },
-  backRow: { position: "absolute", top: 56, left: 24 },
+  backRow: { position: "absolute", top: 8, left: 0 },
   title: { fontSize: 22, fontWeight: "800", marginBottom: 8 },
   subtitle: { fontSize: 13, lineHeight: 19, marginBottom: 20 },
   scanWrap: { marginBottom: 22 },
