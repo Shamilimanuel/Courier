@@ -39,8 +39,10 @@ function createServer(config) {
 
   function requireAuth(req, res, next) {
     const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    if (!token || !timingSafeEqual(token, config.token)) {
+    // A plain <a href> download link can't set a header, so a query param is
+    // also accepted — only for reads, and it's the same secret either way.
+    const token = header.startsWith("Bearer ") ? header.slice(7) : req.query.token || "";
+    if (!token || !timingSafeEqual(String(token), config.token)) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }

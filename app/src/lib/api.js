@@ -65,4 +65,17 @@ export function setClipboard(pairing, text) {
   });
 }
 
+export function listFiles(pairing) {
+  return request(pairing, "/files").then((r) => r.files);
+}
+
+export function deleteFile(pairing, name) {
+  return request(pairing, `/files/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+/** A direct, authenticated download URL for a file held by this Stop. */
+export function fileDownloadUrl(pairing, name) {
+  return `${baseUrl(pairing)}/files/${encodeURIComponent(name)}?token=${encodeURIComponent(pairing.token)}`;
+}
+
 export { ApiError };

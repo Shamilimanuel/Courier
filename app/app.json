@@ -18,7 +18,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["INTERNET", "ACCESS_NETWORK_STATE", "ACCESS_WIFI_STATE", "CAMERA"]
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -38,7 +43,8 @@
           "cameraPermission": "Courier uses the camera only to read the pairing code shown on your PC.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

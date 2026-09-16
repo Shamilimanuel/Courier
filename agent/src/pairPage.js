@@ -135,6 +135,33 @@ async function renderPairPage(config) {
     max-width: 400px; margin: 0 auto;
   }
   .toast.show { opacity: 1; transform: translateY(0); }
+
+  .drop {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 22px;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .drop.over { border-color: var(--accent); }
+  .drop-label { font-weight: 700; font-size: 13.5px; margin-bottom: 3px; }
+  .drop-hint { color: var(--ink3); font-size: 11.5px; }
+
+  .file-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .file-name { flex: 1; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { color: var(--ink3); font-size: 11px; flex: 0 0 auto; }
+  .file-row a { color: var(--accent); font-size: 11.5px; font-weight: 700; text-decoration: none; flex: 0 0 auto; }
+
+  .progress-track { height: 6px; border-radius: 999px; background: var(--surface2); overflow: hidden; margin: 4px 0 14px; }
+  .progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s linear; }
+
+  .empty { color: var(--ink3); font-size: 12.5px; text-align: center; padding: 14px 0; }
 </style>
 </head>
 <body>
@@ -164,6 +191,21 @@ async function renderPairPage(config) {
       <div class="field-label">Token</div>
       <div class="field-value">${escapeHtml(config.token)}</div>
     </div>
+
+    <div class="divider">Send a file to this PC</div>
+    <p class="sub" style="margin-bottom:14px;">From any PC's browser — no app needed on this end. It lands in this PC's Courier folder, where any phone paired to it can pick it up from the Receive tab.</p>
+
+    <div class="drop" id="drop">
+      <div class="drop-label">Tap to choose a file</div>
+      <div class="drop-hint">or drag one here</div>
+    </div>
+    <input type="file" id="fileInput" style="display:none" multiple>
+    <div id="progressWrap" style="display:none;">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="divider">Files on this PC</div>
+    <div id="fileList"><div class="empty">Loading…</div></div>
   </div>
 
   <div class="toast" id="toast">Copied</div>
@@ -172,15 +214,105 @@ async function renderPairPage(config) {
   var ip = ${JSON.stringify(ip)};
   var port = ${JSON.stringify(config.port)};
   var token = ${JSON.stringify(config.token)};
+  var authHeaders = { Authorization: 'Bearer ' + token };
 
   document.getElementById('copyBtn').addEventListener('click', function () {
     var text = 'Address: ' + ip + ':' + port + '\\nToken: ' + token;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).catch(function () {});
     }
+    showToast('Copied');
+  });
+
+  function showToast(msg) {
     var toast = document.getElementById('toast');
+    toast.textContent = msg;
     toast.classList.add('show');
     setTimeout(function () { toast.classList.remove('show'); }, 1800);
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return n + ' B';
+    var units = ['KB', 'MB', 'GB'], u = 0, v = n / 1024;
+    while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+    return v.toFixed(v < 10 ? 1 : 0) + ' ' + units[u];
+  }
+
+  function loadFiles() {
+    fetch('/files', { headers: authHeaders })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = document.getElementById('fileList');
+        if (!data.files || !data.files.length) {
+          list.innerHTML = '<div class="empty">Nothing here yet</div>';
+          return;
+        }
+        list.innerHTML = data.files.map(function (f) {
+          return '<div class="file-row">' +
+            '<div class="file-name">' + f.name.replace(/</g, '&lt;') + '</div>' +
+            '<div class="file-meta">' + formatBytes(f.size) + '</div>' +
+            '<a href="/files/' + encodeURIComponent(f.name) + '?token=' + encodeURIComponent(token) + '" download>Download</a>' +
+            '</div>';
+        }).join('');
+      })
+      .catch(function () {
+        document.getElementById('fileList').innerHTML = '<div class="empty">Could not load the file list</div>';
+      });
+  }
+  loadFiles();
+
+  function uploadFile(file, onDuplicate) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/files');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    var progressWrap = document.getElementById('progressWrap');
+    var progressFill = document.getElementById('progressFill');
+    progressWrap.style.display = 'block';
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) progressFill.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+    };
+    xhr.onload = function () {
+      progressWrap.style.display = 'none';
+      progressFill.style.width = '0%';
+      var body = {};
+      try { body = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status === 409 && body.code === 'duplicate') {
+        showToast(file.name + ' already exists — saving as a copy');
+        uploadFile(file, 'rename');
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        showToast('Sent ' + file.name);
+        loadFiles();
+      } else {
+        showToast('Failed to send ' + file.name);
+      }
+    };
+    xhr.onerror = function () {
+      progressWrap.style.display = 'none';
+      showToast('Failed to send ' + file.name);
+    };
+    var formData = new FormData();
+    if (onDuplicate) formData.append('onDuplicate', onDuplicate);
+    formData.append('file', file);
+    xhr.send(formData);
+  }
+
+  var drop = document.getElementById('drop');
+  var fileInput = document.getElementById('fileInput');
+  drop.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    Array.prototype.forEach.call(fileInput.files, function (f) { uploadFile(f); });
+    fileInput.value = '';
+  });
+  ['dragover', 'dragleave', 'drop'].forEach(function (evt) {
+    drop.addEventListener(evt, function (e) {
+      e.preventDefault();
+      drop.classList.toggle('over', evt === 'dragover');
+      if (evt === 'drop' && e.dataTransfer.files.length) {
+        Array.prototype.forEach.call(e.dataTransfer.files, function (f) { uploadFile(f); });
+      }
+    });
   });
 </script>
 </body>

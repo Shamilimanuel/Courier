@@ -84,7 +84,7 @@ export default function PairScreen({ onPaired, onBack }) {
       )}
 
       <Text style={[styles.title, { color: theme.ink }]}>
-        {onBack ? "Add a PC" : "Pair with your PC"}
+        {onBack ? "Add a stop" : "Add your first stop"}
       </Text>
       <Text style={[styles.subtitle, { color: theme.ink2 }]}>
         Run the Courier installer or `npm run pair` on that PC, then scan the

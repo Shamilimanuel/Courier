@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert } from "react-native";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { useTheme } from "../theme/ThemeContext";
 import { raised, sunken, filled, RADIUS } from "../theme/clay";
 import { ClayButton, IconButton, CategoryTile } from "../components/Clay";
-import { CATEGORY_ICONS, KebabIcon, SignalIcon } from "../components/icons";
+import { CATEGORY_ICONS, KebabIcon, SignalIcon, CheckIcon } from "../components/icons";
 import { removeDevice } from "../lib/pairing";
-import { pingHealth } from "../lib/api";
-import { getHistory } from "../lib/history";
+import { pingHealth, listFiles, deleteFile, fileDownloadUrl, ApiError } from "../lib/api";
+import { getHistory, addHistoryEntry } from "../lib/history";
 import { formatBytes } from "../lib/upload";
 
 const CATEGORIES = [
@@ -32,6 +34,10 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [online, setOnline] = useState({});
+  const [files, setFiles] = useState(null);
+  const [filesError, setFilesError] = useState(null);
+  const [busyFile, setBusyFile] = useState(null);
+  const [savedFiles, setSavedFiles] = useState({});
 
   useEffect(() => {
     getHistory().then(setHistory);
@@ -48,6 +54,58 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
       cancelled = true;
     };
   }, [devices]);
+
+  useEffect(() => {
+    if (tab === "receive") loadFiles();
+  }, [tab, activeDevice.id]);
+
+  async function loadFiles() {
+    setFilesError(null);
+    try {
+      const list = await listFiles(activeDevice);
+      setFiles(list);
+    } catch (err) {
+      setFilesError(err instanceof ApiError ? err.message : "Could not reach this Stop.");
+      setFiles([]);
+    }
+  }
+
+  async function handleSave(file) {
+    setBusyFile(file.name);
+    try {
+      const localUri = FileSystem.cacheDirectory + file.name;
+      await FileSystem.downloadAsync(fileDownloadUrl(activeDevice, file.name), localUri);
+      setSavedFiles((current) => ({ ...current, [file.name]: true }));
+      await addHistoryEntry({
+        name: file.name,
+        size: file.size,
+        category: "file",
+        direction: "received",
+        hostname: activeDevice.hostname || activeDevice.ip,
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(localUri);
+      } else {
+        Alert.alert("Courier", `Saved to ${localUri}`);
+      }
+    } catch (err) {
+      Alert.alert("Courier", err instanceof ApiError ? err.message : "Could not save that file.");
+    } finally {
+      setBusyFile(null);
+    }
+  }
+
+  async function handleRemove(file) {
+    setBusyFile(file.name);
+    try {
+      await deleteFile(activeDevice, file.name);
+      setFiles((current) => current.filter((f) => f.name !== file.name));
+    } catch (err) {
+      Alert.alert("Courier", err instanceof ApiError ? err.message : "Could not remove that file.");
+    } finally {
+      setBusyFile(null);
+    }
+  }
 
   async function handleForget() {
     setConfirmOpen(false);
@@ -69,6 +127,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
         </IconButton>
       </View>
 
+      <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Your stops</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deviceRow}>
         {devices.map((d) => {
           const isActive = d.id === activeDevice.id;
@@ -98,7 +157,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
           );
         })}
         <Pressable onPress={onAddDevice} style={[styles.deviceChip, sunken(theme, 0.7)]}>
-          <Text style={[styles.deviceChipText, { color: theme.ink2 }]}>+ Add PC</Text>
+          <Text style={[styles.deviceChipText, { color: theme.ink2 }]}>+ Add a stop</Text>
         </Pressable>
       </ScrollView>
 
@@ -157,7 +216,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
                     </Text>
                     {entry.hostname && (
                       <Text style={[styles.recentTarget, { color: theme.ink3 }]} numberOfLines={1}>
-                        → {entry.hostname}
+                        {entry.direction === "received" ? "←" : "→"} {entry.hostname}
                       </Text>
                     )}
                   </View>
@@ -168,30 +227,84 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
         </>
       ) : (
         <View style={styles.receivePane}>
-          <View style={[styles.radarCore, filled(theme, theme.dusk, theme.duskDeep)]}>
-            <SignalIcon size={24} color={theme.onFill} strokeWidth={1.8} />
-          </View>
-          <Text style={[styles.receiveTitle, { color: theme.ink }]}>Receiving isn't built yet</Text>
-          <Text style={[styles.receiveSub, { color: theme.ink2 }]}>
-            Text sync works both ways already. File and media receiving is next
-            on the list.
-          </Text>
+          {files === null ? (
+            <>
+              <View style={[styles.radarCore, filled(theme, theme.dusk, theme.duskDeep)]}>
+                <SignalIcon size={24} color={theme.onFill} strokeWidth={1.8} />
+              </View>
+              <Text style={[styles.receiveTitle, { color: theme.ink }]}>Checking {activeDevice.hostname}…</Text>
+            </>
+          ) : filesError ? (
+            <>
+              <Text style={[styles.receiveTitle, { color: theme.ink }]}>Can't reach this stop</Text>
+              <Text style={[styles.receiveSub, { color: theme.ink2 }]}>{filesError}</Text>
+              <View style={{ marginTop: 16, width: "100%" }}>
+                <ClayButton label="Try again" onPress={loadFiles} />
+              </View>
+            </>
+          ) : files.length === 0 ? (
+            <>
+              <View style={[styles.radarCore, filled(theme, theme.dusk, theme.duskDeep)]}>
+                <SignalIcon size={24} color={theme.onFill} strokeWidth={1.8} />
+              </View>
+              <Text style={[styles.receiveTitle, { color: theme.ink }]}>Nothing waiting here</Text>
+              <Text style={[styles.receiveSub, { color: theme.ink2 }]}>
+                Files sent to {activeDevice.hostname} from any other stop will show up here.
+              </Text>
+            </>
+          ) : (
+            <ScrollView style={{ width: "100%" }} contentContainerStyle={{ gap: 10 }}>
+              {files.map((file) => (
+                <View key={file.name} style={[styles.fileRow, raised(theme, 0.8)]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fileName, { color: theme.ink }]} numberOfLines={1}>
+                      {file.name}
+                    </Text>
+                    <Text style={[styles.fileMeta, { color: theme.ink3 }]}>
+                      {formatBytes(file.size)} · {relativeTime(file.mtime)}
+                    </Text>
+                  </View>
+                  {savedFiles[file.name] ? (
+                    <View style={[styles.checkDot, { backgroundColor: theme.moss }]}>
+                      <CheckIcon size={11} color="#FFFFFF" strokeWidth={3} />
+                    </View>
+                  ) : (
+                    <View style={styles.fileActions}>
+                      <ClayButton
+                        label="Save"
+                        tone="accent"
+                        busy={busyFile === file.name}
+                        onPress={() => handleSave(file)}
+                        style={styles.fileBtn}
+                      />
+                      <ClayButton
+                        label="Remove"
+                        busy={busyFile === file.name}
+                        onPress={() => handleRemove(file)}
+                        style={styles.fileBtn}
+                      />
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
       )}
 
       <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
         <View style={styles.veil}>
           <View style={[styles.sheet, { backgroundColor: theme.ground }]}>
-            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Forget this PC</Text>
+            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Remove this stop</Text>
             <Text style={[styles.sheetSub, { color: theme.ink2 }]}>
-              Remove {activeDevice.hostname} from your paired devices?
+              Remove {activeDevice.hostname} from your stops?
             </Text>
             <View style={styles.sheetRow}>
               <View style={{ flex: 1 }}>
                 <ClayButton label="Cancel" onPress={() => setConfirmOpen(false)} />
               </View>
               <View style={{ flex: 1 }}>
-                <ClayButton label="Forget" tone="danger" onPress={handleForget} />
+                <ClayButton label="Remove" tone="danger" onPress={handleForget} />
               </View>
             </View>
           </View>
@@ -209,7 +322,7 @@ const styles = StyleSheet.create({
   brandMarkText: { fontWeight: "900", fontSize: 15 },
   brandName: { fontWeight: "800", fontSize: 17 },
 
-  deviceRow: { gap: 8, paddingBottom: 4, marginBottom: 14 },
+  deviceRow: { gap: 8, paddingBottom: 4, marginBottom: 18 },
   deviceChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -239,10 +352,17 @@ const styles = StyleSheet.create({
   recentMeta: { fontSize: 10, fontWeight: "600", marginTop: 2 },
   recentTarget: { fontSize: 9.5, fontWeight: "600", marginTop: 1 },
 
-  receivePane: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
-  radarCore: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  receivePane: { flex: 1, alignItems: "center", paddingHorizontal: 0 },
+  radarCore: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 18, marginTop: 30 },
   receiveTitle: { fontWeight: "800", fontSize: 15, marginBottom: 6, textAlign: "center" },
   receiveSub: { fontSize: 12.5, lineHeight: 18, textAlign: "center" },
+
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, padding: 12 },
+  fileName: { fontWeight: "800", fontSize: 12.5 },
+  fileMeta: { fontSize: 10.5, fontWeight: "600", marginTop: 2 },
+  fileActions: { flexDirection: "row", gap: 6 },
+  fileBtn: { width: 78, paddingVertical: 9 },
+  checkDot: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
 
   veil: { flex: 1, backgroundColor: "rgba(20,14,30,0.4)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: RADIUS.sheet, borderTopRightRadius: RADIUS.sheet, padding: 22, paddingBottom: 34 },

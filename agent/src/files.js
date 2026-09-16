@@ -31,7 +31,61 @@ function nextAvailableName(dir, name) {
   return candidate;
 }
 
+/** Strips any directory parts from a client-supplied name and confirms the
+ * resolved path can't escape DEST_DIR — a name like "../../evil" would
+ * otherwise write or read outside the Courier folder entirely. */
+function safeFileName(name) {
+  const stripped = path.basename(String(name || ""));
+  if (!stripped || stripped === "." || stripped === "..") return null;
+  const resolved = path.resolve(DEST_DIR, stripped);
+  if (path.dirname(resolved) !== DEST_DIR) return null;
+  return stripped;
+}
+
 function registerFileRoutes(app, requireAuth) {
+  app.get("/files", requireAuth, (req, res) => {
+    fs.readdir(DEST_DIR, { withFileTypes: true }, (err, entries) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      const files = entries
+        .filter((e) => e.isFile())
+        .map((e) => {
+          const stat = fs.statSync(path.join(DEST_DIR, e.name));
+          return { name: e.name, size: stat.size, mtime: stat.mtimeMs };
+        })
+        .sort((a, b) => b.mtime - a.mtime);
+      res.json({ files });
+    });
+  });
+
+  app.get("/files/:name", requireAuth, (req, res) => {
+    const safeName = safeFileName(req.params.name);
+    const filePath = safeName && path.join(DEST_DIR, safeName);
+    if (!filePath || !fs.existsSync(filePath)) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    res.download(filePath, safeName);
+  });
+
+  app.delete("/files/:name", requireAuth, (req, res) => {
+    const safeName = safeFileName(req.params.name);
+    const filePath = safeName && path.join(DEST_DIR, safeName);
+    if (!filePath || !fs.existsSync(filePath)) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ deleted: true });
+    });
+  });
+
   app.post("/files", requireAuth, upload.single("file"), (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: "no file in request" });
@@ -39,7 +93,7 @@ function registerFileRoutes(app, requireAuth) {
     }
 
     const stagedPath = req.file.path;
-    const originalName = req.file.originalname;
+    const originalName = path.basename(req.file.originalname) || "file";
     const onDuplicate = req.body.onDuplicate; // undefined | 'replace' | 'rename' | 'skip'
     const destPath = path.join(DEST_DIR, originalName);
     const exists = fs.existsSync(destPath);
