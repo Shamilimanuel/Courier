@@ -1,24 +1,15 @@
-const os = require("os");
 const qrcode = require("qrcode-terminal");
 const { loadOrCreateConfig } = require("./config");
-
-function getLanAddress() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return "127.0.0.1";
-}
+const { pairingUrl, getLanAddress } = require("./pairPage");
 
 const config = loadOrCreateConfig();
 const ip = getLanAddress();
-const payload = JSON.stringify({ ip, port: config.port, token: config.token });
+const url = pairingUrl(config);
 
 console.log(`Address: ${ip}:${config.port}`);
 console.log(`Token:   ${config.token}`);
 console.log("");
-qrcode.generate(payload, { small: true });
+console.log("Scan with Courier's in-app scanner, or with any camera app --");
+console.log("the same code opens a download link if it isn't installed yet.");
+console.log("");
+qrcode.generate(url, { small: true });

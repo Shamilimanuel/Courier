@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const os = require("os");
 const { getClipboardText, setClipboardText } = require("./clipboard");
 const { registerFileRoutes } = require("./files");
+const { renderPairPage } = require("./pairPage");
 
 function timingSafeEqual(a, b) {
   const bufA = Buffer.from(a, "utf8");
@@ -64,6 +65,19 @@ function createServer(config) {
       port: config.port,
       interfaces,
     });
+  });
+
+  // No auth: this is what a QR scan or a browser lands on before the phone
+  // has a token to send. Same trust model as /health — anyone on this Wi-Fi
+  // can reach it — except this one hands out the actual pairing token, not
+  // just status info, so it's a deliberately bigger exposure than /health.
+  app.get("/pair", async (req, res) => {
+    try {
+      const html = await renderPairPage(config);
+      res.type("html").send(html);
+    } catch (err) {
+      res.status(500).send("Could not render the pairing page: " + err.message);
+    }
   });
 
   app.get("/clipboard", requireAuth, async (req, res) => {

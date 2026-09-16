@@ -45,13 +45,52 @@ function Write-Ok    { param([string]$m) Write-Host "  $m" -ForegroundColor Gree
 function Write-Warn2 { param([string]$m) Write-Host "  $m" -ForegroundColor Yellow }
 function Write-Dim   { param([string]$m) Write-Host "  $m" -ForegroundColor DarkGray }
 
+<#
+    The banner.
+
+    Drawn from a bitmap rather than pasted as literal block characters, so
+    this file stays plain ASCII -- PowerShell 5.1 reads a .ps1 as ANSI
+    unless it has a byte-order mark, and pasted block art turns to
+    mojibake. Built from [char] codes it renders correctly however the
+    script is fetched or run.
+
+    Signal teal, not Reveille's cyan-to-blue -- Courier gets its own mark.
+#>
+
+$script:Glyphs = @{
+    'C' = @('.####', '#....', '#....', '#....', '.####')
+    'O' = @('.###.', '#...#', '#...#', '#...#', '.###.')
+    'U' = @('#...#', '#...#', '#...#', '#...#', '.###.')
+    'R' = @('####.', '#...#', '####.', '#..#.', '#...#')
+    'I' = @('#####', '..#..', '..#..', '..#..', '#####')
+    'E' = @('#####', '#....', '####.', '#....', '#####')
+}
+
 function Write-Banner {
-    $rule = [string][char]0x2500   # horizontal rule
+    $block = [string][char]0x2588      # full block
+    $rule = [string][char]0x2500       # horizontal rule
+    $word = 'COURIER'
+
+    # Bright signal teal at the top, settling to a deeper teal below -- one
+    # hue, not a blend, since the whole identity is a single accent colour.
+    $gradient = @('Cyan', 'Cyan', 'DarkCyan', 'DarkCyan', 'DarkCyan')
+
     Write-Host ''
-    Write-Host '  Courier' -ForegroundColor Cyan
-    Write-Host ('  ' + ($rule * 50)) -ForegroundColor DarkGray
+    for ($row = 0; $row -lt 5; $row++) {
+        Write-Host '  ' -NoNewline
+        for ($i = 0; $i -lt $word.Length; $i++) {
+            $line = $script:Glyphs[[string]$word[$i]][$row]
+            $text = ($line -replace '#', $block) -replace '\.', ' '
+            $colour = if ($i -eq 0) { 'White' } else { $gradient[$row] }
+            Write-Host "$text " -ForegroundColor $colour -NoNewline
+        }
+        Write-Host ''
+    }
+
+    Write-Host ''
+    Write-Host ('  ' + ($rule * 54)) -ForegroundColor DarkGray
     Write-Host '   send text, clipboard and files between phone and PC' -ForegroundColor Gray
-    Write-Host ('  ' + ($rule * 50)) -ForegroundColor DarkGray
+    Write-Host ('  ' + ($rule * 54)) -ForegroundColor DarkGray
     Write-Host ''
 }
 

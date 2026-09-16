@@ -7,6 +7,28 @@ import { addDevice } from "../lib/pairing";
 import { checkHealth, ApiError } from "../lib/api";
 import { BackIcon } from "../components/icons";
 
+/** The agent's QR encodes a URL (so any camera app can open it); parse the
+ * pairing fields from its query string. Falls back to the older raw-JSON
+ * format in case an agent hasn't been updated yet. */
+function parsePairingCode(data) {
+  try {
+    const url = new URL(data);
+    const ip = url.searchParams.get("ip");
+    const port = url.searchParams.get("port");
+    const token = url.searchParams.get("token");
+    if (ip && port && token) return { ip, port, token };
+  } catch {
+    // not a URL — fall through to the legacy format
+  }
+  try {
+    const parsed = JSON.parse(data);
+    if (parsed.ip && parsed.port && parsed.token) return parsed;
+  } catch {
+    // not JSON either
+  }
+  return null;
+}
+
 export default function PairScreen({ onPaired, onBack }) {
   const { theme } = useTheme();
   const [ip, setIp] = useState("");
@@ -37,14 +59,8 @@ export default function PairScreen({ onPaired, onBack }) {
 
   function handleScanned(data) {
     setScannerOpen(false);
-    let parsed;
-    try {
-      parsed = JSON.parse(data);
-    } catch {
-      setError("That QR code isn't a Courier pairing code.");
-      return;
-    }
-    if (!parsed.ip || !parsed.port || !parsed.token) {
+    const parsed = parsePairingCode(data);
+    if (!parsed) {
       setError("That QR code isn't a Courier pairing code.");
       return;
     }
