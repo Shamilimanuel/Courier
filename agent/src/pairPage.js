@@ -184,8 +184,16 @@ async function renderPairPage(config) {
     <div class="divider">Or enter manually</div>
 
     <div class="field">
+      <div class="field-label">This PC</div>
+      <div class="field-value">${escapeHtml(os.hostname())}</div>
+    </div>
+    <div class="field">
       <div class="field-label">PC address</div>
-      <div class="field-value">${escapeHtml(ip)}:${escapeHtml(config.port)}</div>
+      <div class="field-value">${escapeHtml(ip)}</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Port</div>
+      <div class="field-value">${escapeHtml(config.port)}</div>
     </div>
     <div class="field">
       <div class="field-label">Token</div>
