@@ -64,6 +64,10 @@ function selfStop() {
 
 function notifyFileReceived(file) {
   history.addHistoryEntry({ name: file.name, size: file.size, direction: "received", hostname: "" });
+  if (win) win.webContents.send("file:arrived", { name: file.name, size: file.size });
+  // The window shows its own note in the corner; Windows' one is for when
+  // it is hidden in the tray or behind other windows.
+  if (win && win.isVisible() && win.isFocused()) return;
   if (!Notification.isSupported()) return;
   const n = new Notification({ title: "Courier", body: `New file: ${file.name}` });
   n.on("click", () => {
@@ -99,12 +103,18 @@ function startServer() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 420,
-    height: 680,
-    minWidth: 360,
-    minHeight: 520,
+    width: 780,
+    height: 600,
+    minWidth: 520,
+    minHeight: 460,
     icon: path.join(__dirname, "..", "assets", "icon.png"),
     autoHideMenuBar: true,
+    // The page draws its own title bar in the chosen look (renderer
+    // .tbar); Windows and Linux lay their buttons over its right end and
+    // take the look's colours through app:titleBar. macOS keeps its dots.
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    ...(process.platform === "darwin" ? {} : { titleBarOverlay: { color: "#FBF8FF", symbolColor: "#6C6390", height: 36 } }),
+    backgroundColor: "#DED6F0",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -360,6 +370,11 @@ ipcMain.handle("local:open", (_e, name) => {
   return shell.openPath(path.join(dir, name));
 });
 
+ipcMain.handle("local:show", (_e, name) => {
+  const dir = config.destDir || DEFAULT_DEST_DIR;
+  shell.showItemInFolder(path.join(dir, path.basename(String(name))));
+});
+
 ipcMain.handle("local:openFolder", () => shell.openPath(config.destDir || DEFAULT_DEST_DIR));
 
 ipcMain.handle("local:delete", (_e, name) => client.deleteFile(selfStop(), name));
@@ -391,6 +406,15 @@ ipcMain.handle("remote:delete", (_e, stopId, name) => {
 });
 
 ipcMain.handle("history:list", () => history.getHistory());
+
+ipcMain.on("app:titleBar", (_e, { color, symbolColor }) => {
+  if (!win || process.platform === "darwin") return;
+  try {
+    win.setTitleBarOverlay({ color, symbolColor, height: 36 });
+  } catch {
+    // an older window manager without overlay support keeps its defaults
+  }
+});
 
 ipcMain.handle("app:version", () => app.getVersion());
 

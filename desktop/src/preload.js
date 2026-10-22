@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("courier", {
 
   listLocalFiles: () => ipcRenderer.invoke("local:list"),
   openLocalFile: (name) => ipcRenderer.invoke("local:open", name),
+  showLocalFile: (name) => ipcRenderer.invoke("local:show", name),
   openLocalFolder: () => ipcRenderer.invoke("local:openFolder"),
   deleteLocalFile: (name) => ipcRenderer.invoke("local:delete", name),
 
@@ -36,8 +37,12 @@ contextBridge.exposeInMainWorld("courier", {
   openExternal: (url) => ipcRenderer.invoke("app:openExternal", url),
   quitApp: () => ipcRenderer.invoke("app:quit"),
 
+  platform: process.platform,
+  setTitleBar: (colors) => ipcRenderer.send("app:titleBar", colors),
+
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   onNavigate: (cb) => ipcRenderer.on("navigate", (_e, tab) => cb(tab)),
+  onFileArrived: (cb) => ipcRenderer.on("file:arrived", (_e, file) => cb(file)),
   onPreselectFile: (cb) => ipcRenderer.on("preselect-file", (_e, filePath) => cb(filePath)),
 });

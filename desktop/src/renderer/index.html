@@ -6,102 +6,132 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <header class="brand">
-      <div class="mark">C</div>
-      <div class="brand-name">Courier</div>
-    </header>
+  <div class="win">
+    <header class="tbar"><span class="mark" data-mark></span><span id="winTitle">Courier</span></header>
 
-    <div id="updateBanner" class="updateBanner hidden">
-      <div class="updateText">
-        <div class="updateTitle" id="updateTitle"></div>
-        <div class="updateSub">Download it, then run it over this one</div>
-      </div>
-      <button class="btn btnAccent updateBtn" id="updateGetBtn">Get it</button>
-      <button class="linkBtn" id="updateDismissBtn">✕</button>
+    <div class="body">
+      <aside class="side">
+        <div class="me">
+          <span class="lab">This stop</span>
+          <span class="name" id="meName">This PC</span>
+          <span class="meta"><span class="dot online"></span><span id="meNet">Ready</span></span>
+        </div>
+        <button class="nav on" data-tab="send"><span data-ic="send"></span><span class="txt">Send</span></button>
+        <button class="nav" data-tab="receive"><span data-ic="inbox"></span><span class="txt">Receive</span><span class="badge hidden" id="recvBadge"></span></button>
+        <button class="nav" data-tab="pair"><span data-ic="link"></span><span class="txt">Pair</span></button>
+        <button class="nav" data-tab="settings"><span data-ic="gear"></span><span class="txt">Settings</span></button>
+        <div class="sideFoot"><div class="meta" id="sideVersion"></div></div>
+      </aside>
+
+      <main class="main" id="main">
+        <!-- ------------------------------------------------------- send -->
+        <section class="page" id="panel-send">
+          <div id="updateBanner" class="card updateBanner hidden">
+            <span class="ico" data-ic="down"></span>
+            <div class="grow"><div class="name" id="updateTitle"></div><div class="meta">Download it, then run it over this one</div></div>
+            <button class="btn pri sm" id="updateGetBtn">Get it</button>
+            <button class="btn sm icon" id="updateDismissBtn" aria-label="Not now"><span data-ic="x"></span></button>
+          </div>
+
+          <h3>Send</h3>
+          <div class="lab">Send to</div>
+          <div class="chips" id="stopsRow"></div>
+
+          <button class="drop" id="dropZone">
+            <span class="ico" data-ic="file"></span>
+            <b>Drop files here, or choose</b>
+            <span>Or right-click a file in Explorer: Send with Courier</span>
+          </button>
+          <input type="file" id="fileInput" multiple class="hidden">
+          <div id="itemsList" class="list"></div>
+
+          <div class="rowx" style="flex-wrap:wrap">
+            <button class="btn" id="sendClipboardBtn"><span data-ic="clip"></span>Send my clipboard</button>
+            <button class="btn" id="pullClipboardBtn"><span data-ic="down"></span>Get their clipboard</button>
+          </div>
+          <div class="pin">
+            <textarea id="textBox" rows="1" placeholder="Type a message or a link…"></textarea>
+            <button class="btn pri" id="sendTextBtn"><span data-ic="send"></span>Send</button>
+          </div>
+
+          <div class="lab">Recent</div>
+          <div id="recentList" class="list"></div>
+        </section>
+
+        <!-- ---------------------------------------------------- receive -->
+        <section class="page hidden" id="panel-receive">
+          <h3>Receive</h3>
+          <div class="meta wrap">Files land in <b id="folderPath"></b>. Phones can also pick up files you leave here.</div>
+          <div class="rowx">
+            <button class="btn sm" id="openFolderBtn"><span data-ic="folder"></span>Open the folder</button>
+            <button class="btn sm" id="changeFolderBtn">Change folder</button>
+          </div>
+          <div class="lab">On this PC</div>
+          <div id="fileList" class="list"></div>
+
+          <div id="remoteSection" class="hidden">
+            <div class="lab" id="remoteDivider" style="margin-bottom:12px">Waiting on</div>
+            <div id="remoteFileList" class="list"></div>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------- pair -->
+        <section class="page hidden" id="panel-pair">
+          <h3>Pair</h3>
+          <div class="card">
+            <div class="rowx" style="margin-bottom:12px"><span class="pulse"></span>
+              <div class="grow"><div class="name">Ready to pair</div><div class="meta">On the phone: + Add, then Scan a QR code.</div></div>
+            </div>
+            <div class="pairCard">
+              <img class="qr" id="qrImg" alt="Pairing QR code">
+              <div class="facts">
+                <div class="fact"><div class="lab">This PC</div><div class="val" id="infoHost"></div></div>
+                <div class="fact"><div class="lab">Address</div><div class="val"><span id="infoIp"></span> · port <span id="infoPort"></span></div></div>
+                <div class="fact"><div class="lab">Token</div><div class="val"><span id="infoToken">••••••••</span> <button class="linkBtn" id="showTokenBtn">Show</button></div></div>
+                <div class="fact"><div class="lab">Fingerprint</div><div class="val" id="infoFingerprint" style="font-size:10.5px"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lab">Paired stops</div>
+          <div id="stopsList" class="list"></div>
+
+          <div class="lab">Add another PC by hand</div>
+          <div class="card" style="display:grid;gap:8px">
+            <div class="meta">Its address, port and token are under Pair on that PC.</div>
+            <div class="manual">
+              <input class="field" id="addIp" placeholder="Address, e.g. 192.168.1.42">
+              <input class="field" id="addPort" placeholder="Port" value="5544">
+              <input class="field" id="addToken" placeholder="Token">
+            </div>
+            <div class="rowx"><button class="btn pri" id="addStopBtn"><span data-ic="link"></span>Pair</button><div class="errorText grow" id="addStopError"></div></div>
+          </div>
+        </section>
+
+        <!-- --------------------------------------------------- settings -->
+        <section class="page hidden" id="panel-settings">
+          <h3>Settings</h3>
+          <div class="lab">Look</div>
+          <div class="tgrid" id="themeGrid"></div>
+
+          <div class="lab">Files that arrive go to</div>
+          <div class="setrow">
+            <span class="ico" data-ic="folder"></span>
+            <div class="grow"><div class="name" id="setFolder"></div><div class="meta">Shown when a file lands</div></div>
+            <button class="btn sm" id="setFolderBtn">Change</button>
+          </div>
+
+          <div class="lab">About</div>
+          <div class="setrow">
+            <span class="ico"><span class="mark" data-mark style="width:24px;height:24px;box-shadow:none"></span></span>
+            <div class="grow"><div class="name" id="setVersion">Courier Desktop</div><div class="meta hint" id="setUpdateHint">Also checks itself when Courier starts</div></div>
+            <button class="btn sm" id="setUpdateBtn">Check</button>
+          </div>
+        </section>
+      </main>
     </div>
 
-    <div class="stopsRow" id="stopsRow"></div>
-
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-tab="send">Send</button>
-      <button class="tab" data-tab="receive">Receive</button>
-      <button class="tab" data-tab="pair">Pair</button>
-      <button class="tab" data-tab="settings">Settings</button>
-    </nav>
-
-    <section class="panel" id="panel-send">
-      <div class="dropZone" id="dropZone">
-        <div class="dropLabel">Drop files to send</div>
-        <div class="dropHint">or click to choose (multiple allowed)</div>
-        <input type="file" id="fileInput" multiple style="display:none">
-      </div>
-      <div id="itemsList" class="itemsList"></div>
-
-      <div class="divider">Clipboard &amp; text</div>
-      <textarea id="textBox" class="textBox" placeholder="Type or paste text…"></textarea>
-      <div class="row">
-        <button class="btn" id="sendClipboardBtn">Send my clipboard</button>
-        <button class="btn" id="pullClipboardBtn">Get their clipboard</button>
-      </div>
-      <button class="btn btnAccent" id="sendTextBtn">Send text above</button>
-
-      <div class="divider">Recent</div>
-      <div id="recentList" class="fileList"></div>
-    </section>
-
-    <section class="panel hidden" id="panel-receive">
-      <div class="rowBetween">
-        <div class="divider" style="margin:0;">Files on this PC</div>
-        <button class="linkBtn" id="changeFolderBtn">Change folder</button>
-      </div>
-      <div class="folderPath" id="folderPath"></div>
-      <div id="fileList" class="fileList"></div>
-
-      <div id="remoteSection" class="hidden">
-        <div class="divider" id="remoteDivider">Files on stop</div>
-        <div id="remoteFileList" class="fileList"></div>
-      </div>
-    </section>
-
-    <section class="panel hidden" id="panel-pair">
-      <div class="divider" style="margin-top:0;">This PC's pairing code</div>
-      <div class="qrWrap"><img id="qrImg" alt="Pairing QR code"></div>
-      <div class="field"><div class="fieldLabel">This PC</div><div class="fieldValue" id="infoHost"></div></div>
-      <div class="field"><div class="fieldLabel">Address</div><div class="fieldValue" id="infoIp"></div></div>
-      <div class="field"><div class="fieldLabel">Port</div><div class="fieldValue" id="infoPort"></div></div>
-      <div class="field"><div class="fieldLabel">Token</div><div class="fieldValue" id="infoToken"></div></div>
-      <div class="field"><div class="fieldLabel">Fingerprint</div><div class="fieldValue" id="infoFingerprint"></div></div>
-
-      <div class="divider">Add a stop</div>
-      <input class="input" id="addIp" placeholder="PC address, e.g. 192.168.1.42">
-      <input class="input" id="addPort" placeholder="Port" value="5544">
-      <input class="input" id="addToken" placeholder="Token">
-      <button class="btn btnAccent" id="addStopBtn">Pair</button>
-      <div class="errorText" id="addStopError"></div>
-
-      <div class="divider">Your stops</div>
-      <div id="stopsList" class="fileList"></div>
-    </section>
-
-    <section class="panel hidden" id="panel-settings">
-      <div class="divider" style="margin-top:0;">Look</div>
-      <div class="themeGrid" id="themeGrid"></div>
-
-      <div class="divider">Files that arrive go to</div>
-      <div class="setRow">
-        <div class="grow"><div class="setTitle" id="setFolder"></div><div class="setHint">Opened when you click Open on a received file</div></div>
-        <button class="btn" id="setFolderBtn">Change</button>
-      </div>
-
-      <div class="divider">About</div>
-      <div class="setRow">
-        <div class="grow"><div class="setTitle" id="setVersion">Courier Desktop</div><div class="setHint" id="setUpdateHint">Also checks itself when Courier starts</div></div>
-        <button class="btn" id="setUpdateBtn">Check</button>
-      </div>
-    </section>
-
-    <div class="toast" id="toast"></div>
+    <div class="toast hidden" id="toast"></div>
   </div>
 
   <script src="renderer.js"></script>
