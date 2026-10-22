@@ -186,6 +186,7 @@ svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width:
   background: var(--surface); box-shadow: var(--card); font-weight: 700; font-size: 12px; white-space: nowrap;
 }
 .chip.on { box-shadow: var(--press); color: var(--accent); }
+.chip svg.i { font-size: 13px; margin-left: -1px; }
 .chip.add { background: transparent; box-shadow: none; border: 1.5px dashed var(--line); color: var(--ink2); padding: 6px 11px; }
 
 .hrow { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--r-sm); background: var(--surface); box-shadow: var(--card); }
@@ -230,6 +231,26 @@ svg.i { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width:
 .errorText { color: var(--bad); font-size: 12px; font-weight: 700; min-height: 14px; }
 .linkBtn { color: var(--accent); font-weight: 700; font-size: 12px; padding: 2px 0; }
 .confirm { color: var(--bad); font-size: 12px; font-weight: 700; }
+
+.code { display: flex; gap: 8px; justify-content: center; }
+.code b {
+  width: 46px; height: 58px; display: grid; place-items: center; background: var(--surface); box-shadow: var(--card);
+  border-radius: var(--r-sm); font: var(--dw) 28px var(--display); color: var(--ink);
+}
+.askCard { display: grid; gap: 10px; justify-items: center; text-align: center; }
+.modal {
+  position: fixed; inset: 36px 0 0 0; z-index: 50; background: rgba(8,10,18,.45);
+  display: grid; place-items: center; animation: fade .2s both;
+}
+.modal .box {
+  width: 330px; max-width: calc(100% - 32px); background: var(--ground); background-image: var(--art);
+  border-radius: calc(var(--r) + 4px); padding: 18px; display: grid; gap: 11px;
+  box-shadow: 0 20px 40px rgba(0,0,0,.4), var(--card); animation: pop .3s cubic-bezier(.3,1.4,.5,1) both;
+}
+.modal .acts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.paired { color: var(--ok); font-weight: 700; font-size: 12px; display: inline-flex; gap: 5px; align-items: center; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: scale(.94); } }
 
 /* settings */
 .tgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

@@ -43,6 +43,20 @@ contextBridge.exposeInMainWorld("courier", {
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   onNavigate: (cb) => ipcRenderer.on("navigate", (_e, tab) => cb(tab)),
+  onTextArrived: (cb) => ipcRenderer.on("text:arrived", (_e, t) => cb(t)),
+  onToast: (cb) => ipcRenderer.on("toast", (_e, t) => cb(t)),
+  onStopsChanged: (cb) => ipcRenderer.on("stops:changed", () => cb()),
+
+  discoverStart: () => ipcRenderer.invoke("discover:start"),
+  onDiscovered: (cb) => ipcRenderer.on("discover:list", (_e, list) => cb(list)),
+  pairAsk: (target) => ipcRenderer.invoke("pair:ask", target),
+  pairAskCancel: () => ipcRenderer.invoke("pair:askCancel"),
+  onPairAsked: (cb) => ipcRenderer.on("pair:asked", (_e, r) => cb(r)),
+  pairIncomingList: () => ipcRenderer.invoke("pair:incomingList"),
+  pairAnswer: (requestId, allow) => ipcRenderer.invoke("pair:answer", requestId, allow),
+  onPairIncoming: (cb) => ipcRenderer.on("pair:incoming", (_e, r) => cb(r)),
+  onPairSettled: (cb) => ipcRenderer.on("pair:settled", (_e, r) => cb(r)),
+
   onFileArrived: (cb) => ipcRenderer.on("file:arrived", (_e, file) => cb(file)),
   onPreselectFile: (cb) => ipcRenderer.on("preselect-file", (_e, filePath) => cb(filePath)),
 });

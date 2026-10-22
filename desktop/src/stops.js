@@ -34,13 +34,42 @@ function getStop(id) {
 /** Adds a newly paired stop. `securePort`/`fingerprint` are set when the
  * stop supports HTTPS+pinning (see desktop/src/client.js); omitted for a
  * stop that only offered plain HTTP, which the client falls back to. */
-function addStop({ ip, port, token, hostname, securePort, fingerprint }) {
+function addStop({ ip, port, token, hostname, securePort, fingerprint, peerId, kind }) {
   const list = readAll();
-  const id = `${ip}:${port}:${Date.now()}`;
-  const stop = { id, ip, port: String(port), token, hostname: hostname || ip, securePort, fingerprint };
-  list.push(stop);
-  writeAll(list);
+  // The same stop paired again (it has an id since Courier 1.3 / desktop
+  // 1.3): update it instead of listing it twice.
+  const known = peerId ? list.find((s) => s.peerId === peerId) : null;
+  const stop = {
+    id: known ? known.id : `${ip}:${port}:${Date.now()}`,
+    ip,
+    port: String(port),
+    token,
+    hostname: hostname || ip,
+    securePort,
+    fingerprint,
+    peerId: peerId || undefined,
+    kind: kind === "phone" ? "phone" : "pc",
+  };
+  writeAll(known ? list.map((s) => (s === known ? stop : s)) : [...list, stop]);
   return stop;
+}
+
+function findByPeerId(peerId) {
+  return readAll().find((s) => s.peerId && s.peerId === peerId) || null;
+}
+
+/** A known stop turned up at a new address (phones get new ones often).
+ * Returns true when something changed. */
+function updateAddress(peerId, ip, port) {
+  const list = readAll();
+  const stop = list.find((s) => s.peerId && s.peerId === peerId);
+  if (!stop || !ip) return false;
+  const nextPort = port ? String(port) : stop.port;
+  if (stop.ip === ip && stop.port === nextPort) return false;
+  stop.ip = ip;
+  stop.port = nextPort;
+  writeAll(list);
+  return true;
 }
 
 /** Forgets one stop. Returns the remaining list. */
@@ -50,4 +79,4 @@ function removeStop(id) {
   return next;
 }
 
-module.exports = { init, getStops, getStop, addStop, removeStop };
+module.exports = { init, getStops, getStop, addStop, removeStop, findByPeerId, updateAddress };

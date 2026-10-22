@@ -67,6 +67,13 @@ function loadOrCreateConfig(configDir) {
     Object.assign(config, generateCert());
     changed = true;
   }
+  // A name for this stop that never changes, even when its address or
+  // hostname does: other stops recognise it by this when it turns up on
+  // the Wi-Fi again with a new address.
+  if (!config.id) {
+    config.id = crypto.randomUUID();
+    changed = true;
+  }
   if (changed) writeConfig(config, configDir);
   return config;
 }

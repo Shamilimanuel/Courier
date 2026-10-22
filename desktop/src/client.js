@@ -21,6 +21,16 @@ const crypto = require("crypto");
 
 const REQUEST_TIMEOUT_MS = 8000;
 
+// Who this PC is, sent along with every call so the other stop can keep
+// this PC's address up to date (X-Courier-From) and say who a file is from.
+let selfId = null;
+function setSelfId(id) {
+  selfId = id;
+}
+function fromHeader() {
+  return selfId ? { "X-Courier-From": selfId } : {};
+}
+
 class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -95,7 +105,7 @@ function request(stop, urlPath, { method = "GET", headers = {}, body } = {}) {
       port,
       path: urlPath,
       method,
-      headers: { Authorization: `Bearer ${stop.token}`, ...headers },
+      headers: { Authorization: `Bearer ${stop.token}`, ...fromHeader(), ...headers },
       timeout: REQUEST_TIMEOUT_MS,
       // No connection pooling on the secure path: a pinned request must
       // get its own fresh TLS handshake every time, since the fingerprint
@@ -123,7 +133,9 @@ function request(stop, urlPath, { method = "GET", headers = {}, body } = {}) {
           resolve(json);
           return;
         }
-        reject(new ApiError(json.error || `Request failed (${res.statusCode})`, res.statusCode));
+        const err = new ApiError(json.error || `Request failed (${res.statusCode})`, res.statusCode);
+        if (json.existingSize !== undefined) err.existingSize = json.existingSize;
+        reject(err);
       });
     });
     if (secure) pinPeerCertificate(req, stop, reject);
@@ -232,6 +244,7 @@ function uploadFile(stop, filePath, onDuplicate, onProgress) {
       method: "POST",
       headers: {
         Authorization: `Bearer ${stop.token}`,
+        ...fromHeader(),
         "Content-Type": `multipart/form-data; boundary=${boundary}`,
         "Content-Length": totalLength,
       },
@@ -325,7 +338,214 @@ function downloadFile(stop, name, destPath) {
   });
 }
 
+function sendJson(stop, urlPath, method, payload) {
+  const body = JSON.stringify(payload);
+  return request(stop, urlPath, {
+    method,
+    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    body,
+  });
+}
+
+/** Sends a message (kind "text") or this PC's clipboard (kind "clip"):
+ * both land on the other stop's clipboard, and a phone shows a note. */
+function sendText(stop, text, kind) {
+  return sendJson(stop, "/clipboard", "POST", { text, kind });
+}
+
+/**
+ * Sends a file in a way that survives the Wi-Fi dropping out: the other
+ * stop keeps what arrived (see agent/src/uploads.js), and this asks it
+ * "how far did you get?" and carries on from there, a few times with a
+ * growing pause, before giving up. `resume` is the { uploadId } from an
+ * earlier try that gave up; passing it carries on from where that one
+ * stopped instead of starting over.
+ *
+ * Returns { promise, cancel }. Progress reports { loaded, total,
+ * reconnecting, uploadId }. A stop that doesn't know /uploads yet (an
+ * older Courier) gets the old all-at-once upload instead.
+ */
+function sendFile(stop, filePath, { onDuplicate, onProgress, resume } = {}) {
+  const name = path.basename(filePath);
+  const size = fs.statSync(filePath).size;
+  const RETRIES = 8;
+  let cancelled = false;
+  let inFlight = null; // { req, stream } of the PUT going on now
+  let fallback = null;
+  let uploadId = resume?.uploadId || null;
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function put(offset) {
+    const { mod, port, secure } = transportFor(stop);
+    return new Promise((resolve, reject) => {
+      const options = {
+        host: stop.ip,
+        port,
+        path: `/uploads/${uploadId}?offset=${offset}`,
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${stop.token}`,
+          ...fromHeader(),
+          "Content-Type": "application/octet-stream",
+          "Content-Length": size - offset,
+        },
+        agent: false,
+      };
+      if (secure) options.rejectUnauthorized = false;
+      const req = mod.request(options, (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          let json = {};
+          try {
+            json = data ? JSON.parse(data) : {};
+          } catch {
+            // fall through with an empty body
+          }
+          if (res.statusCode >= 200 && res.statusCode < 300) resolve(json);
+          else if (res.statusCode === 409 && typeof json.offset === "number") resolve({ moveTo: json.offset });
+          else {
+            const err = new ApiError(json.error || `Upload failed (${res.statusCode})`, res.statusCode);
+            err.fatal = [400, 401, 404].includes(res.statusCode);
+            reject(err);
+          }
+        });
+      });
+      if (secure) pinPeerCertificate(req, stop, reject);
+      req.on("error", (err) => reject(err));
+      const stream = fs.createReadStream(filePath, { start: offset });
+      inFlight = { req, stream };
+      let sent = offset;
+      stream.on("data", (chunk) => {
+        sent += chunk.length;
+        if (onProgress) onProgress({ loaded: sent, total: size, uploadId });
+      });
+      stream.on("error", (err) => req.destroy(err));
+      stream.pipe(req);
+    });
+  }
+
+  const promise = (async () => {
+    if (!uploadId) {
+      let created;
+      try {
+        created = await sendJson(stop, "/uploads", "POST", { name, size, onDuplicate });
+      } catch (err) {
+        if (err.status === 404) {
+          // An older Courier on the other side: the old way, all at once.
+          fallback = uploadFile(stop, filePath, onDuplicate, onProgress);
+          return fallback.promise;
+        }
+        if (err.status === 409) return { duplicate: true, existingSize: err.existingSize || 0 };
+        throw err;
+      }
+      if (created.skipped) return { skipped: true };
+      uploadId = created.uploadId;
+    }
+
+    let offset = 0;
+    let failures = 0;
+    if (resume?.uploadId) offset = (await request(stop, `/uploads/${uploadId}`)).offset;
+
+    for (;;) {
+      if (cancelled) throw new UploadCancelled();
+      try {
+        const result = await put(offset);
+        if (result.moveTo !== undefined) {
+          offset = result.moveTo;
+          continue;
+        }
+        if (result.saved || result.skipped) return result;
+        offset = result.offset;
+        failures = 0;
+      } catch (err) {
+        if (cancelled) throw new UploadCancelled();
+        if (err.fatal || failures >= RETRIES) {
+          err.uploadId = uploadId;
+          throw err;
+        }
+        failures++;
+        if (onProgress) onProgress({ loaded: offset, total: size, uploadId, reconnecting: true });
+        await sleep(Math.min(1000 * 2 ** (failures - 1), 15000));
+        try {
+          offset = (await request(stop, `/uploads/${uploadId}`)).offset;
+        } catch (e) {
+          if (e.status === 404) throw e;
+          // still unreachable: the next PUT fails fast or carries on
+        }
+      }
+    }
+  })();
+
+  const cancel = () => {
+    cancelled = true;
+    fallback?.cancel();
+    inFlight?.stream.destroy();
+    inFlight?.req.destroy();
+    if (uploadId) request(stop, `/uploads/${uploadId}`, { method: "DELETE" }).catch(() => {});
+  };
+
+  return { promise, cancel };
+}
+
+/** Asks a stop found on the Wi-Fi to pair; it shows a code and Allow. No
+ * token yet, so plain HTTP on its normal port. */
+function pairRequest(target, me) {
+  return plainJson(target, "/pair/request", "POST", me);
+}
+
+function pairStatus(target, requestId) {
+  return plainJson(target, `/pair/request/${requestId}`, "GET");
+}
+
+/** After pairing by QR code or by hand: tells the other stop how to reach
+ * this PC back, so it can send here too. */
+function introduce(stop, me) {
+  return sendJson(stop, "/pair/introduce", "POST", me);
+}
+
+function plainJson(target, urlPath, method, payload) {
+  const body = payload ? JSON.stringify(payload) : null;
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: target.ip,
+        port: target.port,
+        path: urlPath,
+        method,
+        headers: body ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } : {},
+        timeout: REQUEST_TIMEOUT_MS,
+        agent: false,
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          let json = {};
+          try {
+            json = data ? JSON.parse(data) : {};
+          } catch {
+            // fall through with an empty body
+          }
+          if (res.statusCode >= 200 && res.statusCode < 300) resolve(json);
+          else reject(new ApiError(json.error || `Request failed (${res.statusCode})`, res.statusCode));
+        });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", () => reject(new ApiError(`Could not reach ${target.name || target.ip}. Is it still on this Wi-Fi?`, 0)));
+    req.end(body || undefined);
+  });
+}
+
 module.exports = {
+  setSelfId,
+  sendText,
+  sendFile,
+  pairRequest,
+  pairStatus,
+  introduce,
   ApiError,
   UploadCancelled,
   probeFingerprint,

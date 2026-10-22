@@ -10,6 +10,9 @@
   const P = {
     plane: '<path d="M3.5 11.5L20.5 4l-4.6 16.5-4.3-5.4z"/><path d="M11.6 15.1L20.5 4"/>',
     pc: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+    wifi: '<path d="M2.5 9a14 14 0 0 1 19 0M6 12.5a9 9 0 0 1 12 0M9.5 16a4 4 0 0 1 5 0"/><circle cx="12" cy="19" r=".6"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
     file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
     photo: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
     play: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
@@ -23,6 +26,7 @@
     down: '<path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/>',
     folder: '<path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2h8A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
     resend: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/>',
     out: '<path d="M7 17 17 7M9 7h8v8"/>',
     in: '<path d="M17 7 7 17M15 17H7V9"/>',
@@ -108,7 +112,7 @@
     document.querySelectorAll(".page").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
     $("main").scrollTop = 0;
     if (name === "receive") { state.unread = 0; renderBadge(); loadLocalFiles(); loadRemoteFiles(); }
-    if (name === "pair") { loadPairingInfo(); renderStopsList(); }
+    if (name === "pair") { loadPairingInfo(); renderStopsList(); renderFound(); findNearby(); }
     if (name === "settings") loadSettingsPanel();
   }
   document.querySelectorAll(".nav").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
@@ -140,8 +144,8 @@
   function renderStops() {
     const row = $("stopsRow");
     row.innerHTML = state.stops.map((stop) =>
-      `<button class="chip${stop.id === state.activeStopId ? " on" : ""}" data-stop="${stop.id}"><span class="${dotClass(stop)}"></span>${escapeHtml(stopName(stop))}</button>`
-    ).join("") + `<button class="chip add" data-add>+ ${state.stops.length ? "Add a stop" : "Pair another PC to send to it"}</button>`;
+      `<button class="chip${stop.id === state.activeStopId ? " on" : ""}" data-stop="${stop.id}"><span class="${dotClass(stop)}"></span>${ic(stop.kind === "phone" ? "phone" : "pc")}${escapeHtml(stopName(stop))}</button>`
+    ).join("") + `<button class="chip add" data-add>+ ${state.stops.length ? "Add a stop" : "Pair a phone or PC to send to it"}</button>`;
   }
   $("stopsRow").addEventListener("click", (e) => {
     if (e.target.closest("[data-add]")) { switchTab("pair"); return; }
@@ -156,13 +160,13 @@
   function renderStopsList() {
     const list = $("stopsList");
     if (!state.stops.length) {
-      list.innerHTML = `<div class="card empty"><span class="ico">${ic("pc")}</span><div class="name">No other PCs yet</div><div class="meta">Phones don't need to be listed here: once a phone scans the code above, it can send to this PC. Pair another PC to send to it from here.</div></div>`;
+      list.innerHTML = `<div class="card empty"><span class="ico">${ic("phone")}</span><div class="name">Nothing paired yet</div><div class="meta">Pick a phone or PC under Nearby, or on the phone: + Add, then Find on this Wi-Fi.</div></div>`;
       return;
     }
     list.innerHTML = state.stops.map((s) => `
       <div class="hrow" data-stop="${s.id}">
-        <span class="ico">${ic("pc")}</span>
-        <div class="grow"><div class="name">${escapeHtml(stopName(s))}</div><div class="meta">${escapeHtml(s.ip)}:${escapeHtml(s.port)}</div></div>
+        <span class="ico">${ic(s.kind === "phone" ? "phone" : "pc")}</span>
+        <div class="grow"><div class="name">${escapeHtml(stopName(s))}</div><div class="meta">${s.kind === "phone" ? "Phone" : "PC"} · ${escapeHtml(s.ip)}:${escapeHtml(s.port)}</div></div>
         <span class="${dotClass(s)}"></span>
         <div class="acts"><button class="btn sm" data-forget>Forget</button></div>
       </div>`).join("");
@@ -232,12 +236,14 @@
     else if (item.status === "uploading") {
       if (item.progress && item.progress.total) {
         pct = Math.round((item.progress.loaded / item.progress.total) * 100);
-        meta = to + formatBytes(item.progress.loaded) + " of " + formatBytes(item.progress.total);
+        meta = item.progress.reconnecting
+          ? "Connection lost. Carrying on from " + pct + "% when " + (item.stopName || "it") + " is back…"
+          : to + formatBytes(item.progress.loaded) + " of " + formatBytes(item.progress.total);
       } else meta = to + "starting…";
       actions = `<button class="btn sm" data-do="cancel">Cancel</button>`;
     } else if (item.status === "done") { meta = to + "delivered"; pct = 100; }
     else if (item.status === "cancelled") { meta = "Cancelled. Nothing was kept there."; actions = `<button class="btn sm" data-do="retry">${ic("resend")}Retry</button>`; }
-    else if (item.status === "error") { meta = item.error || "Failed"; actions = `<button class="btn sm" data-do="retry">${ic("resend")}Retry</button>`; }
+    else if (item.status === "error") { meta = item.error || "Failed"; actions = `<button class="btn sm" data-do="retry">${ic("resend")}${item.canResume ? "Carry on" : "Retry"}</button>`; }
     else if (item.status === "duplicate") {
       meta = (item.stopName || "That stop") + " already has a file with this name (" + formatBytes(item.existingSize || 0) + ")";
       actions = `<button class="btn sm pri" data-do="rename">Keep both</button><button class="btn sm" data-do="replace">Replace</button><button class="btn sm" data-do="skip">Skip</button>`;
@@ -293,9 +299,14 @@
     const item = state.items.find((i) => i.id === uploadId);
     if (item) { item.status = "cancelled"; renderItems(); }
   });
-  window.courier.onUploadError(({ uploadId, message }) => {
+  window.courier.onUploadError(({ uploadId, message, canResume }) => {
     const item = state.items.find((i) => i.id === uploadId);
-    if (item) { item.status = "error"; item.error = message; renderItems(); }
+    if (item) {
+      item.status = "error";
+      item.canResume = !!canResume;
+      item.error = canResume ? "Stopped at " + Math.round(((item.progress && item.progress.loaded) || 0) / ((item.progress && item.progress.total) || 1) * 100) + "%. " + message : message;
+      renderItems();
+    }
     else showToast(message);
   });
 
@@ -429,7 +440,7 @@
   async function loadRemoteFiles() {
     const stop = activeStop();
     const section = $("remoteSection");
-    if (!stop) { section.classList.add("hidden"); return; }
+    if (!stop || stop.kind === "phone") { section.classList.add("hidden"); return; }
     section.classList.remove("hidden");
     $("remoteDivider").textContent = "Waiting on " + stopName(stop);
     const list = $("remoteFileList");
@@ -489,6 +500,100 @@
     ]);
   });
 
+  // -------------------------------------------------------- find nearby --
+  state.found = [];
+  function renderFound() {
+    const list = $("foundList");
+    const found = state.found.slice().sort((a, b) => Number(a.paired) - Number(b.paired) || a.name.localeCompare(b.name));
+    if (!found.length) {
+      list.innerHTML = `<div class="card empty"><span class="ico">${ic("wifi")}</span><div class="name">Looking on this Wi-Fi…</div><div class="meta">Open Courier on the phone. Nothing turning up? Some Wi-Fi hides devices from each other: use the QR code below.</div></div>`;
+      return;
+    }
+    list.innerHTML = found.map((f) => `
+      <div class="hrow" data-found="${escapeHtml(f.id)}">
+        <span class="ico">${ic(f.kind === "phone" ? "phone" : "pc")}</span>
+        <div class="grow"><div class="name">${escapeHtml(f.name)}</div><div class="meta">${f.kind === "phone" ? "Phone" : "PC"} · ${escapeHtml(f.ip)}</div></div>
+        ${f.paired ? `<span class="paired">${ic("check")}Paired</span>` : `<button class="btn sm pri" data-pair>Pair</button>`}
+      </div>`).join("");
+  }
+  window.courier.onDiscovered((list) => { state.found = list; if (state.tab === "pair") renderFound(); });
+  function findNearby() {
+    window.courier.discoverStart().then((list) => { state.found = list; renderFound(); });
+  }
+  $("findBtn").addEventListener("click", findNearby);
+
+  $("foundList").addEventListener("click", async (e) => {
+    if (!e.target.closest("[data-pair]")) return;
+    const f = state.found.find((x) => x.id === e.target.closest(".hrow").dataset.found);
+    if (!f) return;
+    try {
+      const { code } = await window.courier.pairAsk({ id: f.id, name: f.name, ip: f.ip, port: f.port });
+      showAsk(f, code);
+    } catch (err) {
+      showToast(err.message || "Could not ask it to pair");
+    }
+  });
+
+  function codeHtml(code) {
+    return `<div class="code">${String(code).split("").map((d) => `<b>${escapeHtml(d)}</b>`).join("")}</div>`;
+  }
+  function showAsk(f, code) {
+    const card = $("askCard");
+    card.className = "card askCard";
+    card.innerHTML = `<div class="name">Pairing with ${escapeHtml(f.name)}</div>${codeHtml(code)}
+      <div class="rowx"><span class="pulse"></span><span class="meta">Same code on ${escapeHtml(f.name)}? Allow it there.</span></div>
+      <button class="btn sm" id="askCancelBtn">Cancel</button>`;
+    $("askCancelBtn").onclick = () => { window.courier.pairAskCancel(); card.className = "card hidden"; };
+  }
+  window.courier.onPairAsked(async ({ state: st, stop }) => {
+    $("askCard").className = "card hidden";
+    if (st === "allowed") {
+      state.activeStopId = stop.id;
+      await loadStops();
+      renderStopsList();
+      findNearby();
+      toast("Paired with " + stopName(stop), "You can send to it from Send now");
+    } else toast(st === "denied" ? "It said no" : "No answer in time", "Nothing was paired.");
+  });
+
+  // Another stop asking this PC: same code on both, then Allow or Deny.
+  function showIncoming(ask) {
+    state.incoming = ask;
+    const m = $("pairModal");
+    m.innerHTML = `<div class="box">
+      <div class="rowx"><span class="mark">${ic("plane")}</span><div class="name">${escapeHtml(ask.name)} wants to pair</div></div>
+      <div class="meta">${ask.kind === "phone" ? "The phone" : "That PC"} shows this code:</div>${codeHtml(ask.code)}
+      <div class="meta">Only allow it if ${escapeHtml(ask.name)} shows the same code. Then it can send here, and you can send to it.</div>
+      <div class="acts2"><button class="btn" data-answer="no">Deny</button><button class="btn pri" data-answer="yes">Allow</button></div></div>`;
+    m.classList.remove("hidden");
+  }
+  $("pairModal").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-answer]");
+    if (!btn || !state.incoming) return;
+    const ask = state.incoming;
+    state.incoming = null;
+    $("pairModal").classList.add("hidden");
+    const stop = await window.courier.pairAnswer(ask.requestId, btn.dataset.answer === "yes");
+    if (stop) {
+      state.activeStopId = stop.id;
+      await loadStops();
+      if (state.tab === "pair") { renderStopsList(); findNearby(); }
+      toast("Paired with " + stopName(stop), "You can send to it, and it to you");
+    }
+  });
+  window.courier.onPairIncoming(showIncoming);
+  window.courier.onPairSettled(({ requestId }) => {
+    if (state.incoming && state.incoming.requestId === requestId) { state.incoming = null; $("pairModal").classList.add("hidden"); }
+  });
+  window.courier.pairIncomingList().then((list) => { if (list.length) showIncoming(list[list.length - 1]); });
+
+  window.courier.onStopsChanged(() => { loadStops(); if (state.tab === "pair") renderStopsList(); });
+  window.courier.onToast((t) => toast(t.title, t.sub));
+  window.courier.onTextArrived(({ text, kind, from }) => {
+    loadHistory();
+    toast((kind === "text" ? "Message" : "Clipboard") + (from ? " from " + from : ""), text.length > 140 ? text.slice(0, 137) + "…" : text, null);
+  });
+
   // ----------------------------------------------------------------- pair --
   let token = "";
   async function loadPairingInfo() {
@@ -511,6 +616,7 @@
     $("meName").textContent = info.hostname;
     $("meNet").textContent = "Ready · " + info.ip;
     $("winTitle").textContent = "Courier — " + info.hostname;
+    $("visibleName").textContent = info.hostname;
   }
 
   $("addStopBtn").addEventListener("click", async () => {

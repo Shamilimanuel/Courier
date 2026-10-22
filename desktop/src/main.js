@@ -28,6 +28,7 @@ async function writeClipboard(text) {
 const stops = require("./stops");
 const client = require("./client");
 const history = require("./history");
+const { createDiscovery } = require("./discovery");
 
 // A machine that already ran the headless agent (installed by setup.ps1 to
 // %LOCALAPPDATA%\Courier) has phones paired to a token stored there. Reuse
@@ -48,6 +49,8 @@ let plainServer;
 let secureServer;
 let win;
 let tray;
+let expressApp;
+let discovery;
 
 function selfStop() {
   // Loopback calls dogfood the same pinned HTTPS path a real remote stop
@@ -62,30 +65,113 @@ function selfStop() {
   };
 }
 
-function notifyFileReceived(file) {
-  history.addHistoryEntry({ name: file.name, size: file.size, direction: "received", hostname: "" });
-  if (win) win.webContents.send("file:arrived", { name: file.name, size: file.size });
-  // The window shows its own note in the corner; Windows' one is for when
-  // it is hidden in the tray or behind other windows.
+/** Who this PC is, as told to other stops when pairing. */
+function selfInfo() {
+  return {
+    id: config.id,
+    name: os.hostname(),
+    kind: "pc",
+    port: config.port,
+    securePort: config.port + 1,
+    fingerprint: config.fingerprint,
+    token: config.token,
+  };
+}
+
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+function senderName(peerId) {
+  const stop = peerId ? stops.findByPeerId(peerId) : null;
+  return stop ? stop.hostname || stop.ip : "";
+}
+
+/** Windows' own notification, for when the window is hidden in the tray or
+ * behind other windows; the window shows its own note in the corner. */
+function notifyOutside(title, body, onClick) {
   if (win && win.isVisible() && win.isFocused()) return;
   if (!Notification.isSupported()) return;
-  const n = new Notification({ title: "Courier", body: `New file: ${file.name}` });
+  const n = new Notification({ title, body });
   n.on("click", () => {
     showWindow();
-    win.webContents.send("navigate", "receive");
+    if (onClick) onClick();
   });
   n.show();
+}
+
+function notifyFileReceived(file) {
+  const from = senderName(file.from);
+  history.addHistoryEntry({ name: file.name, size: file.size, direction: "received", hostname: from });
+  send("file:arrived", { name: file.name, size: file.size, from });
+  notifyOutside(file.name + " arrived", from ? "From " + from : "In your Courier folder", () => send("navigate", "receive"));
+}
+
+function notifyTextReceived({ text, kind, from }) {
+  const name = senderName(from);
+  send("text:arrived", { text, kind, from: name });
+  const what = kind === "text" ? "Message" : "Clipboard";
+  notifyOutside(what + (name ? " from " + name : ""), text.length > 120 ? text.slice(0, 117) + "..." : text);
+}
+
+function stopsChanged() {
+  send("stops:changed");
+}
+
+/** Adds (or updates) a stop that paired with us, from what it said about
+ * itself, and tells the window. */
+function savePeer(peer) {
+  const stop = stops.addStop({
+    ip: peer.ip,
+    port: peer.port,
+    token: peer.token,
+    hostname: peer.name,
+    securePort: peer.securePort,
+    fingerprint: peer.fingerprint,
+    peerId: peer.id,
+    kind: peer.kind,
+  });
+  stopsChanged();
+  return stop;
+}
+
+// A stop on the Wi-Fi asked to pair: the window shows the code with Allow
+// and Deny (pair:answer). Kept here so a window opened later still shows it.
+const incomingPairs = new Map();
+
+function onPairRequest({ requestId, code, peer }) {
+  const ask = { requestId, code, name: peer.name, kind: peer.kind, ip: peer.ip };
+  incomingPairs.set(requestId, ask);
+  send("pair:incoming", ask);
+  if (win) win.flashFrame(true);
+  notifyOutside(`${peer.name} wants to pair`, `Code ${code}. Open Courier to allow it.`);
+}
+
+function onPairSettled(requestId, state) {
+  incomingPairs.delete(requestId);
+  send("pair:settled", { requestId, state });
 }
 
 function startServer() {
   if (plainServer) plainServer.close();
   if (secureServer) secureServer.close();
 
-  const expressApp = createServer(config, {
+  expressApp = createServer(config, {
     destDir: config.destDir || undefined,
     onFileReceived: notifyFileReceived,
+    onTextReceived: notifyTextReceived,
     getClipboardText: readClipboard,
     setClipboardText: writeClipboard,
+    onPairRequest,
+    onPairSettled,
+    onIntroduce: (peer) => {
+      const known = stops.findByPeerId(peer.id);
+      savePeer(peer);
+      if (!known) send("toast", { title: `${peer.name} is paired`, sub: "You can send to it from Send now" });
+    },
+    onPeerSeen: ({ id, ip }) => {
+      if (stops.updateAddress(id, ip)) stopsChanged();
+    },
   });
 
   // Same dual-listener approach as the headless agent (agent/src/index.js):
@@ -242,6 +328,8 @@ if (!gotLock) {
   });
 
   app.on("window-all-closed", (event) => event.preventDefault());
+  // Says goodbye on the Wi-Fi, so other stops drop this PC from their lists.
+  app.on("will-quit", () => discovery?.close());
 
   app.whenReady().then(() => {
     configDir = resolveConfigDir();
@@ -249,9 +337,24 @@ if (!gotLock) {
     stops.init(app.getPath("userData"));
     history.init(app.getPath("userData"));
 
+    client.setSelfId(config.id);
     startServer();
     createTray();
     createWindow();
+
+    // Tell the Wi-Fi this PC is here, and keep listening for other stops,
+    // so a phone that got a new address is followed automatically.
+    discovery = createDiscovery({
+      self: selfInfo,
+      onChange: (found) => {
+        let moved = false;
+        for (const f of found) if (stops.updateAddress(f.id, f.ip, f.port)) moved = true;
+        if (moved) stopsChanged();
+        send("discover:list", markPaired(found));
+      },
+    });
+    discovery.announce();
+    discovery.start();
 
     const filePath = sendArgFrom(process.argv);
     if (filePath) {
@@ -286,13 +389,17 @@ ipcMain.handle("stops:add", async (_e, draft) => {
     const fingerprint = draft.fingerprint || (await client.probeFingerprint(draft.ip, securePort));
     const secureDraft = { ...draft, securePort, fingerprint };
     const health = await client.checkHealth(secureDraft);
-    return stops.addStop({ ...secureDraft, hostname: health.hostname });
+    const stop = stops.addStop({ ...secureDraft, hostname: health.name || health.hostname, peerId: health.id, kind: health.kind });
+    client.introduce(stop, selfInfo()).catch(() => {});
+    return stop;
   } catch {
     // The other side has no HTTPS listener yet (an agent from before
     // encryption support existed) — fall back to the original
     // plain-HTTP-only pairing rather than refusing to pair at all.
     const health = await client.checkHealth(draft);
-    return stops.addStop({ ...draft, hostname: health.hostname });
+    const stop = stops.addStop({ ...draft, hostname: health.name || health.hostname, peerId: health.id, kind: health.kind });
+    client.introduce(stop, selfInfo()).catch(() => {});
+    return stop;
   }
 });
 
@@ -300,10 +407,72 @@ ipcMain.handle("stops:remove", (_e, id) => stops.removeStop(id));
 
 ipcMain.handle("stops:ping", (_e, stop) => client.pingHealth(stop));
 
+// ------------------------------------------------- finding and pairing --
+
+function markPaired(found) {
+  return found.map((f) => ({ ...f, paired: !!stops.findByPeerId(f.id) }));
+}
+
+ipcMain.handle("discover:start", () => {
+  discovery?.start({ sweep: true });
+  return markPaired(discovery ? discovery.list() : []);
+});
+
+ipcMain.handle("pair:incomingList", () => [...incomingPairs.values()]);
+
+ipcMain.handle("pair:answer", (_e, requestId, allow) => {
+  incomingPairs.delete(requestId);
+  const peer = expressApp?.locals.handshake.answer(requestId, allow);
+  if (win) win.flashFrame(false);
+  return peer ? savePeer(peer) : null;
+});
+
+// This PC asking another stop: it shows the code, this window shows the
+// same code, and this keeps asking "allowed yet?" until it is answered.
+let asking = null;
+
+ipcMain.handle("pair:ask", async (_e, target) => {
+  if (asking) asking.cancelled = true;
+  const { requestId, code } = await client.pairRequest(target, selfInfo());
+  const me = { cancelled: false };
+  asking = me;
+  (async () => {
+    const until = Date.now() + 2 * 60 * 1000;
+    while (!me.cancelled && Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (me.cancelled) return;
+      let status;
+      try {
+        status = await client.pairStatus(target, requestId);
+      } catch {
+        continue; // a blip; keep asking
+      }
+      if (status.state === "waiting") continue;
+      if (status.state === "allowed" && status.stop) {
+        const stop = savePeer({ ...status.stop, ip: target.ip, port: status.stop.port || target.port });
+        send("pair:asked", { state: "allowed", stop });
+      } else {
+        send("pair:asked", { state: status.state });
+      }
+      return;
+    }
+    if (!me.cancelled) send("pair:asked", { state: "expired" });
+  })();
+  return { code };
+});
+
+ipcMain.handle("pair:askCancel", () => {
+  if (asking) asking.cancelled = true;
+  asking = null;
+});
+
 // Uploads are long-running with progress/cancel, which doesn't fit
 // invoke()'s single request/response — start over `send`, progress and
 // completion pushed back as events, cancel keyed by the same uploadId.
 const activeUploads = new Map();
+// A send that gave up halfway keeps its place on the other stop; Retry on
+// the same item carries on from there (window item id -> { stopId, uploadId }).
+const resumable = new Map();
 
 ipcMain.on("upload:start", (event, { uploadId, stopId, filePath, onDuplicate }) => {
   const sender = event.sender;
@@ -312,8 +481,13 @@ ipcMain.on("upload:start", (event, { uploadId, stopId, filePath, onDuplicate }) 
     sender.send("upload:error", { uploadId, message: "That stop isn't paired anymore." });
     return;
   }
-  const { promise, cancel } = client.uploadFile(stop, filePath, onDuplicate, (progress) => {
-    sender.send("upload:progress", { uploadId, ...progress });
+  const earlier = resumable.get(uploadId);
+  const resume = earlier && earlier.stopId === stopId && !onDuplicate ? { uploadId: earlier.uploadId } : undefined;
+  resumable.delete(uploadId);
+  const { promise, cancel } = client.sendFile(stop, filePath, {
+    onDuplicate,
+    resume,
+    onProgress: (progress) => sender.send("upload:progress", { ...progress, uploadId }),
   });
   activeUploads.set(uploadId, cancel);
   promise
@@ -335,7 +509,8 @@ ipcMain.on("upload:start", (event, { uploadId, stopId, filePath, onDuplicate }) 
       if (err instanceof client.UploadCancelled) {
         sender.send("upload:cancelled", { uploadId });
       } else {
-        sender.send("upload:error", { uploadId, message: err.message });
+        if (err.uploadId) resumable.set(uploadId, { stopId, uploadId: err.uploadId });
+        sender.send("upload:error", { uploadId, message: err.message, canResume: !!err.uploadId });
       }
     });
 });
@@ -348,13 +523,13 @@ ipcMain.handle("send:clipboard", async (_e, stopId) => {
   const stop = stops.getStop(stopId);
   if (!stop) throw new Error("That stop isn't paired anymore.");
   const text = await readClipboard();
-  return client.setClipboard(stop, text);
+  return client.sendText(stop, text, "clip");
 });
 
 ipcMain.handle("send:text", (_e, stopId, text) => {
   const stop = stops.getStop(stopId);
   if (!stop) throw new Error("That stop isn't paired anymore.");
-  return client.setClipboard(stop, text);
+  return client.sendText(stop, text, "text");
 });
 
 ipcMain.handle("pull:clipboard", (_e, stopId) => {

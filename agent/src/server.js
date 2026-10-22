@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const os = require("os");
 const defaultClipboard = require("./clipboard");
 const { registerFileRoutes } = require("./files");
+const { registerUploadRoutes } = require("./uploads");
+const { registerHandshakeRoutes, cleanIp } = require("./handshake");
 const { renderPairPage } = require("./pairPage");
 
 function timingSafeEqual(a, b) {
@@ -31,7 +33,7 @@ function createServer(config, options = {}) {
     if (origin && LOCAL_ORIGIN.test(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     }
     if (req.method === "OPTIONS") {
       res.sendStatus(204);
@@ -51,7 +53,30 @@ function createServer(config, options = {}) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
+    // A paired stop says who it is, so its address can be kept up to date
+    // when its Wi-Fi hands it a new one (phones change address often).
+    const from = req.get("X-Courier-From");
+    if (from && options.onPeerSeen) {
+      try {
+        options.onPeerSeen({ id: String(from).slice(0, 80), ip: cleanIp(req.socket.remoteAddress) });
+      } catch {
+        // only bookkeeping
+      }
+    }
     next();
+  }
+
+  /** Who this stop is, as told to other stops. */
+  function self() {
+    return {
+      id: config.id,
+      name: options.name || os.hostname(),
+      kind: "pc",
+      port: config.port,
+      securePort: config.port + 1,
+      fingerprint: config.fingerprint,
+      token: config.token,
+    };
   }
 
   app.get("/health", (req, res) => {
@@ -66,6 +91,12 @@ function createServer(config, options = {}) {
     }
 
     res.json({
+      // api 2: /uploads (resume), /pair/request and /pair/introduce
+      api: 2,
+      id: config.id,
+      name: options.name || os.hostname(),
+      kind: "pc",
+      securePort: config.port + 1,
       hostname: os.hostname(),
       uptime: os.uptime(),
       platform: os.platform(),
@@ -97,13 +128,20 @@ function createServer(config, options = {}) {
   });
 
   app.post("/clipboard", requireAuth, async (req, res) => {
-    const { text } = req.body || {};
+    const { text, kind } = req.body || {};
     if (typeof text !== "string") {
       res.status(400).json({ error: "text is required" });
       return;
     }
     try {
       await setClipboardText(text);
+      if (options.onTextReceived) {
+        try {
+          options.onTextReceived({ text, kind: kind === "text" ? "text" : "clip", from: req.get("X-Courier-From") || null });
+        } catch {
+          // a note failing shouldn't fail the clipboard
+        }
+      }
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -111,6 +149,16 @@ function createServer(config, options = {}) {
   });
 
   registerFileRoutes(app, requireAuth, options);
+  registerUploadRoutes(app, requireAuth, {
+    destDir: options.destDir || require("./files").DEST_DIR,
+    onFileReceived: options.onFileReceived,
+  });
+  app.locals.handshake = registerHandshakeRoutes(app, requireAuth, {
+    self,
+    onPairRequest: options.onPairRequest,
+    onIntroduce: options.onIntroduce,
+    onPairSettled: options.onPairSettled,
+  });
 
   return app;
 }

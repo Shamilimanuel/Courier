@@ -152,7 +152,7 @@ function registerFileRoutes(app, requireAuth, { destDir = DEST_DIR, onFileReceiv
       const savedSize = fs.statSync(finalPath).size;
       if (onFileReceived) {
         try {
-          onFileReceived({ name: finalName, size: savedSize });
+          onFileReceived({ name: finalName, size: savedSize, from: req.get("X-Courier-From") || null });
         } catch {
           // A notification failing shouldn't fail the upload it's about.
         }
@@ -167,4 +167,4 @@ function registerFileRoutes(app, requireAuth, { destDir = DEST_DIR, onFileReceiv
   });
 }
 
-module.exports = { registerFileRoutes, DEST_DIR };
+module.exports = { registerFileRoutes, DEST_DIR, STAGING_DIR, moveFile, nextAvailableName, safeFileName };

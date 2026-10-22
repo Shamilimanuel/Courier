@@ -78,10 +78,24 @@
         <!-- ------------------------------------------------------- pair -->
         <section class="page hidden" id="panel-pair">
           <h3>Pair</h3>
+          <div class="card rowx">
+            <span class="pulse"></span>
+            <div class="grow"><div class="name">Visible on this Wi-Fi</div><div class="meta">Phones and PCs with Courier find this PC as <b id="visibleName">this PC</b>.</div></div>
+          </div>
+
+          <div class="rowx" style="margin-top:6px">
+            <div class="lab grow" style="margin-top:0">Nearby</div>
+            <button class="btn sm" id="findBtn"><span data-ic="wifi"></span>Look again</button>
+          </div>
+          <div id="askCard" class="card hidden"></div>
+          <div id="foundList" class="list"></div>
+
+          <div class="lab">Paired</div>
+          <div id="stopsList" class="list"></div>
+
+          <div class="lab">Or with a QR code</div>
           <div class="card">
-            <div class="rowx" style="margin-bottom:12px"><span class="pulse"></span>
-              <div class="grow"><div class="name">Ready to pair</div><div class="meta">On the phone: + Add, then Scan a QR code.</div></div>
-            </div>
+            <div class="meta" style="margin-bottom:10px">For Wi-Fi that hides devices from each other. On the phone: + Add, then Scan a QR code.</div>
             <div class="pairCard">
               <img class="qr" id="qrImg" alt="Pairing QR code">
               <div class="facts">
@@ -92,9 +106,6 @@
               </div>
             </div>
           </div>
-
-          <div class="lab">Paired stops</div>
-          <div id="stopsList" class="list"></div>
 
           <div class="lab">Add another PC by hand</div>
           <div class="card" style="display:grid;gap:8px">
@@ -131,6 +142,7 @@
       </main>
     </div>
 
+    <div class="modal hidden" id="pairModal"></div>
     <div class="toast hidden" id="toast"></div>
   </div>
 
