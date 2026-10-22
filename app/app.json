@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Courier",
+    "slug": "courier",
+    "version": "1.1.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.courier.app",
+      "versionCode": 10000,
+      "adaptiveIcon": {
+        "backgroundColor": "#E3EEFC",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Courier uses the camera only to read the pairing code shown on your PC.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-sharing"
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "courier-desktop",
+  "version": "1.0.0",
+  "description": "Courier desktop tray app — this PC as a stop, and a window to send to other stops",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "postinstall": "npm install --prefix ../agent"
+  },
+  "installConfig": {
+    "installLinks": true
+  },
+  "dependencies": {
+    "courier-agent": "file:../agent",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.courier.desktop",
+    "productName": "Courier",
+    "files": ["src/**/*", "assets/**/*", "node_modules/**/*"],
+    "asarUnpack": ["node_modules/courier-agent/**/*"],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.utilities",
+      "identity": null
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    }
+  }
+}

@@ -1,0 +1,78 @@
+name: Build desktop app
+
+# Produces Windows/macOS/Linux installers for the Courier tray app and
+# attaches them to a GitHub Release you can download straight onto a PC.
+# macOS/Linux builds are unsigned — first launch on macOS needs
+# right-click -> Open past the "unidentified developer" warning.
+#
+# IMPORTANT: bump the version in desktop/package.json for every change you
+# want to ship. The publish step below reuses the release tag if the
+# version hasn't changed, which SILENTLY OVERWRITES the previous installer
+# instead of shipping a new one — this is the exact bug that bit the phone
+# app once already (see android.yml's history).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'agent/**'
+      - '.github/workflows/desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Read the version
+        shell: bash
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Build the installer
+        run: npm run dist -- --publish never
+
+      - name: Publish to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="desktop-v${APP_VERSION}"
+
+          # Whichever OS's job gets here first creates the release; the
+          # other two racing against it are expected to fail this specific
+          # command, which is fine — every job uploads its own files below
+          # regardless of who won the create.
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Courier Desktop $TAG" \
+            --notes "Desktop app built from \`${GITHUB_SHA:0:7}\`. Download the file for your OS below. macOS/Linux builds are unsigned — see the README for the first-launch step." \
+            2>/dev/null || true
+
+          FILES=$(find dist -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.zip' -o -iname '*.AppImage' -o -iname '*.deb' \))
+          for f in $FILES; do
+            echo "Uploading $f"
+            gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber
+          done

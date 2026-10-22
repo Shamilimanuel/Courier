@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Courier</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="brand">
+      <div class="mark">C</div>
+      <div class="brand-name">Courier</div>
+    </header>
+
+    <div id="updateBanner" class="updateBanner hidden">
+      <div class="updateText">
+        <div class="updateTitle" id="updateTitle"></div>
+        <div class="updateSub">Download it, then run it over this one</div>
+      </div>
+      <button class="btn btnAccent updateBtn" id="updateGetBtn">Get it</button>
+      <button class="linkBtn" id="updateDismissBtn">✕</button>
+    </div>
+
+    <div class="stopsRow" id="stopsRow"></div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="send">Send</button>
+      <button class="tab" data-tab="receive">Receive</button>
+      <button class="tab" data-tab="pair">Pair</button>
+    </nav>
+
+    <section class="panel" id="panel-send">
+      <div class="dropZone" id="dropZone">
+        <div class="dropLabel">Drop files to send</div>
+        <div class="dropHint">or click to choose (multiple allowed)</div>
+        <input type="file" id="fileInput" multiple style="display:none">
+      </div>
+      <div id="itemsList" class="itemsList"></div>
+
+      <div class="divider">Clipboard &amp; text</div>
+      <textarea id="textBox" class="textBox" placeholder="Type or paste text…"></textarea>
+      <div class="row">
+        <button class="btn" id="sendClipboardBtn">Send my clipboard</button>
+        <button class="btn" id="pullClipboardBtn">Get their clipboard</button>
+      </div>
+      <button class="btn btnAccent" id="sendTextBtn">Send text above</button>
+
+      <div class="divider">Recent</div>
+      <div id="recentList" class="fileList"></div>
+    </section>
+
+    <section class="panel hidden" id="panel-receive">
+      <div class="rowBetween">
+        <div class="divider" style="margin:0;">Files on this PC</div>
+        <button class="linkBtn" id="changeFolderBtn">Change folder</button>
+      </div>
+      <div class="folderPath" id="folderPath"></div>
+      <div id="fileList" class="fileList"></div>
+
+      <div id="remoteSection" class="hidden">
+        <div class="divider" id="remoteDivider">Files on stop</div>
+        <div id="remoteFileList" class="fileList"></div>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="panel-pair">
+      <div class="divider" style="margin-top:0;">This PC's pairing code</div>
+      <div class="qrWrap"><img id="qrImg" alt="Pairing QR code"></div>
+      <div class="field"><div class="fieldLabel">This PC</div><div class="fieldValue" id="infoHost"></div></div>
+      <div class="field"><div class="fieldLabel">Address</div><div class="fieldValue" id="infoIp"></div></div>
+      <div class="field"><div class="fieldLabel">Port</div><div class="fieldValue" id="infoPort"></div></div>
+      <div class="field"><div class="fieldLabel">Token</div><div class="fieldValue" id="infoToken"></div></div>
+      <div class="field"><div class="fieldLabel">Fingerprint</div><div class="fieldValue" id="infoFingerprint"></div></div>
+
+      <div class="divider">Add a stop</div>
+      <input class="input" id="addIp" placeholder="PC address, e.g. 192.168.1.42">
+      <input class="input" id="addPort" placeholder="Port" value="5544">
+      <input class="input" id="addToken" placeholder="Token">
+      <button class="btn btnAccent" id="addStopBtn">Pair</button>
+      <div class="errorText" id="addStopError"></div>
+
+      <div class="divider">Your stops</div>
+      <div id="stopsList" class="fileList"></div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
