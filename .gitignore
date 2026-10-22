@@ -26,3 +26,6 @@ desktop/dist/
 # Kept off the public repo: the project diary, and any real PDFs
 status.md
 *.pdf
+
+# Prototype pages (published as artifacts, not part of the app)
+docs/
