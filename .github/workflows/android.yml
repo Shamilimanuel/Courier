@@ -5,7 +5,9 @@ name: Build Android app
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # Other branches build a test APK (a workflow artifact) but publish no
+    # release, so the phone's update check never offers unfinished work.
+    branches: ['**']
     paths:
       - 'app/**'
       - '.github/workflows/android.yml'
@@ -113,6 +115,7 @@ jobs:
           retention-days: 90
 
       - name: Publish a release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

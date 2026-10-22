@@ -6,7 +6,7 @@ import { raised, sunken, filled, display } from "../theme/clay";
 import { ClayButton, IconButton } from "../components/Clay";
 import { BackIcon, CheckIcon, CATEGORY_ICONS } from "../components/icons";
 import { pingHealth, setClipboard, ApiError } from "../lib/api";
-import { uploadFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
+import { sendFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
 import { addHistoryEntry } from "../lib/history";
 
 /**
@@ -57,7 +57,7 @@ export default function ShareScreen({ devices, activeDeviceId, shareIntent, onCl
     const host = device.hostname || device.ip;
     try {
       if (!files.length) {
-        await setClipboard(device, text);
+        await setClipboard(device, text, "text");
         await addHistoryEntry({ name: text.slice(0, 60), size: text.length, category: "text", direction: "sent", hostname: host });
         setStage("done");
         return;
@@ -68,12 +68,12 @@ export default function ShareScreen({ devices, activeDeviceId, shareIntent, onCl
         const asset = { uri: f.path, name: f.fileName || `shared-${i + 1}`, mimeType: f.mimeType, size: f.size };
         const onProgress = (p) =>
           setProgress({ loaded: doneBytes + p.loaded, total: totalBytes || p.total, speed: p.speed, eta: p.eta, index: i });
-        let job = uploadFile(device, asset, { onProgress });
+        let job = sendFile(device, asset, { onProgress });
         cancelRef.current = job.cancel;
         let result = await job.promise;
         if (result.duplicate) {
           // Shared from another app: never ask, keep both copies.
-          job = uploadFile(device, asset, { onProgress, onDuplicate: "rename" });
+          job = sendFile(device, asset, { onProgress, onDuplicate: "rename" });
           cancelRef.current = job.cancel;
           result = await job.promise;
         }

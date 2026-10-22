@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, ScrollView, Linking } from "react-native";
+import { View, Text, Pressable, ScrollView, Linking, Switch, AppState } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme, useThemedStyles } from "../theme/ThemeContext";
 import { THEMES, THEME_ORDER, raised, sunken, display } from "../theme/clay";
-import { ClayButton, IconButton } from "../components/Clay";
+import { ClayButton, ClayField, IconButton } from "../components/Clay";
 import { BackIcon } from "../components/icons";
 import { removeDevice } from "../lib/pairing";
 import { pingHealth } from "../lib/api";
 import { checkForUpdateDetailed, installedVersionLabel } from "../lib/updates";
+import { Stop, identity, startStop, stopStop } from "../lib/stop";
 
 /**
  * Laid out like Reveille's settings: the looks as a grid of chips, then
@@ -21,6 +23,47 @@ export default function SettingsScreen({ devices, onDevicesChanged, onBack }) {
   const [confirmId, setConfirmId] = useState(null);
   const [updateState, setUpdateState] = useState("idle");
   const [updateResult, setUpdateResult] = useState(null);
+  const [me, setMe] = useState(() => identity());
+  const [listening, setListening] = useState(() => !!identity()?.enabled);
+  const [naming, setNaming] = useState(null);
+  const [batteryOk, setBatteryOk] = useState(true);
+
+  // Re-read after coming back from Android's battery screen.
+  useEffect(() => {
+    if (!Stop) return undefined;
+    const check = () => {
+      try {
+        setBatteryOk(Stop.isIgnoringBatteryOptimizations());
+        setMe(identity());
+      } catch {
+        // keep what we had
+      }
+    };
+    check();
+    const sub = AppState.addEventListener("change", (state) => state === "active" && check());
+    return () => sub.remove();
+  }, []);
+
+  async function toggleListening(on) {
+    setListening(on);
+    if (on) {
+      await AsyncStorage.removeItem("courier.stopOff");
+      await startStop();
+    } else {
+      await AsyncStorage.setItem("courier.stopOff", "1");
+      stopStop();
+    }
+    setTimeout(() => setMe(identity()), 600);
+  }
+
+  function saveName() {
+    const name = (naming || "").trim();
+    if (name) {
+      Stop.setName(name);
+      setMe(identity());
+    }
+    setNaming(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +128,57 @@ export default function SettingsScreen({ devices, onDevicesChanged, onBack }) {
           })}
         </View>
 
+        {Stop && (
+          <>
+            <Text style={labelStyle}>This phone</Text>
+            <View style={[styles.row, sunken(theme, 0.8)]}>
+              <View style={styles.rowText}>
+                <Text style={[styles.rowTitle, { color: theme.ink }]}>Receive in the background</Text>
+                <Text style={[styles.rowHint, { color: theme.ink3 }]}>
+                  {listening ? "PCs and phones can send here, even with Courier closed" : "Off: things only arrive when you fetch them"}
+                </Text>
+              </View>
+              <Switch
+                value={listening}
+                onValueChange={toggleListening}
+                trackColor={{ true: theme.dusk, false: theme.clayLo }}
+                thumbColor={theme.clayHi}
+                accessibilityLabel="Receive in the background"
+              />
+            </View>
+
+            {naming === null ? (
+              <Pressable onPress={() => setNaming(me?.name || "")} style={[styles.row, sunken(theme, 0.8)]} accessibilityRole="button">
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowTitle, { color: theme.ink }]} numberOfLines={1}>{me?.name || "This phone"}</Text>
+                  <Text style={[styles.rowHint, { color: theme.ink3 }]}>The name other stops see on the Wi-Fi</Text>
+                </View>
+                <Text style={[styles.rowAction, { color: theme.dusk }]}>Rename</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.row, sunken(theme, 0.8), { flexDirection: "column", alignItems: "stretch", gap: 10 }]}>
+                <ClayField value={naming} onChangeText={setNaming} autoFocus maxLength={60} placeholder="Shamil's phone" />
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <ClayButton label="Cancel" tone="quiet" onPress={() => setNaming(null)} style={{ flex: 1 }} />
+                  <ClayButton label="Save" tone="accent" onPress={saveName} style={{ flex: 1 }} />
+                </View>
+              </View>
+            )}
+
+            {listening && !batteryOk && (
+              <View style={[styles.row, sunken(theme, 0.8)]}>
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowTitle, { color: theme.ink }]}>Keep it working with the screen off</Text>
+                  <Text style={[styles.rowHint, { color: theme.ink3 }]}>Android may pause Courier to save battery. Allow it, so files still arrive.</Text>
+                </View>
+                <Pressable onPress={() => Stop.askBatteryExemption()} hitSlop={8} accessibilityRole="button">
+                  <Text style={[styles.rowAction, { color: theme.dusk }]}>Allow</Text>
+                </Pressable>
+              </View>
+            )}
+          </>
+        )}
+
         <Text style={labelStyle}>Your stops</Text>
         {devices.map((d) => {
           const isOnline = online[d.id];
@@ -95,7 +189,9 @@ export default function SettingsScreen({ devices, onDevicesChanged, onBack }) {
               <View style={styles.rowText}>
                 <Text style={[styles.rowTitle, { color: theme.ink }]} numberOfLines={1}>{d.hostname || d.ip}</Text>
                 <Text style={[styles.rowHint, { color: theme.ink3 }]} numberOfLines={1}>
-                  {asking ? "Remove this stop from the phone?" : `${d.ip}:${d.port} · ${isOnline == null ? "checking…" : isOnline ? "on this Wi-Fi" : "not reachable"}`}
+                  {asking
+                    ? "Remove this stop from the phone?"
+                    : `${d.kind === "phone" ? "Phone" : "PC"} · ${d.ip} · ${isOnline == null ? "checking…" : isOnline ? "on this Wi-Fi" : "not reachable"}${d.fingerprint ? " · secure" : ""}`}
                 </Text>
               </View>
               {asking ? (

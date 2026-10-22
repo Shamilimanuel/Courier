@@ -1,0 +1,45 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- This phone as a stop: a small server other phones and PCs send to,
+       kept running by a foreground service (the quiet "Courier is ready"
+       notification). connectedDevice is the service type for talking to
+       other devices; declaring CHANGE_WIFI_MULTICAST_STATE is what Android
+       14+ asks for before allowing that type. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+  <application>
+    <service
+      android:name="expo.modules.courierstop.StopService"
+      android:exported="false"
+      android:foregroundServiceType="connectedDevice" />
+
+    <receiver
+      android:name="expo.modules.courierstop.BootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Only used on Android 9 and older, where received files are kept in
+         the app's own folder and handed to other apps through this. -->
+    <provider
+      android:name="expo.modules.courierstop.CourierFileProvider"
+      android:authorities="${applicationId}.courierfiles"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/courier_file_paths" />
+    </provider>
+  </application>
+</manifest>

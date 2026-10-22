@@ -164,6 +164,24 @@ export function PcIcon(props) {
   );
 }
 
+export function PhoneIcon(props) {
+  return (
+    <Icon {...props}>
+      <Rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <Path d="M11 18.5h2" />
+    </Icon>
+  );
+}
+
+export function CopyIcon(props) {
+  return (
+    <Icon {...props}>
+      <Rect x="8" y="8" width="12" height="12" rx="2" />
+      <Path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+    </Icon>
+  );
+}
+
 export const CATEGORY_ICONS = {
   file: { Icon: FileIcon, color: "#7B6BE8" },
   media: { Icon: MediaIcon, color: "#F0784F" },

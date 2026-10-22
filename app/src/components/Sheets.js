@@ -6,7 +6,7 @@ import { useTheme, useThemedStyles } from "../theme/ThemeContext";
 import { sunken, filled, display } from "../theme/clay";
 import { ClayButton, ClayField } from "./Clay";
 import { CheckIcon } from "./icons";
-import { uploadFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
+import { sendFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
 import { addHistoryEntry } from "../lib/history";
 import { getClipboard, setClipboard, ApiError } from "../lib/api";
 
@@ -70,7 +70,10 @@ export function SendSheet({ job, onClose }) {
   const { theme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [phase, setPhase] = useState("idle"); // sending | duplicate | done | error | idle
-  const [progress, setProgress] = useState({ loaded: 0, speed: 0, eta: null, index: 0 });
+  const [progress, setProgress] = useState({ loaded: 0, speed: 0, eta: null, index: 0, reconnecting: false });
+  // Where a send stopped: which file, how much was done before it, and the
+  // upload the other side kept, so "Carry on" continues instead of redoing.
+  const failedRef = useRef(null);
   const [dupName, setDupName] = useState(null);
   const [error, setError] = useState(null);
   const [sentCount, setSentCount] = useState(0);
@@ -85,6 +88,7 @@ export function SendSheet({ job, onClose }) {
   useEffect(() => {
     if (!job) return;
     stopRef.current = false;
+    failedRef.current = null;
     run();
     return () => {
       stopRef.current = true;
@@ -93,28 +97,33 @@ export function SendSheet({ job, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job]);
 
-  async function sendOne(asset, onDuplicate, done) {
-    const { promise, cancel } = uploadFile(job.device, asset, {
+  async function sendOne(asset, onDuplicate, done, resumeUploadId) {
+    const { promise, cancel } = sendFile(job.device, asset, {
       onDuplicate,
-      onProgress: (p) => setProgress((cur) => ({ ...cur, loaded: done + p.loaded, speed: p.speed, eta: p.eta })),
+      resumeUploadId,
+      onProgress: (p) => setProgress((cur) => ({ ...cur, loaded: done + p.loaded, speed: p.speed, eta: p.eta, reconnecting: !!p.reconnecting })),
     });
     cancelRef.current = cancel;
     return promise;
   }
 
   async function run() {
+    const from = failedRef.current;
+    failedRef.current = null;
     setPhase("sending");
     setError(null);
-    setSentCount(0);
-    setProgress({ loaded: 0, speed: 0, eta: null, index: 0 });
-    let done = 0;
-    let sent = 0;
+    let done = from ? from.done : 0;
+    let sent = from ? from.sent : 0;
+    if (!from) setSentCount(0);
+    setProgress({ loaded: done, speed: 0, eta: null, index: from ? from.index : 0, reconnecting: false });
+    let i = from ? from.index : 0;
     try {
-      for (let i = 0; i < assets.length; i++) {
+      for (; i < assets.length; i++) {
         if (stopRef.current) return;
         const asset = assets[i];
         setProgress((cur) => ({ ...cur, index: i }));
-        let result = await sendOne(asset, undefined, done);
+        const resume = from && from.index === i ? from.uploadId : undefined;
+        let result = await sendOne(asset, undefined, done, resume);
         if (result.duplicate) {
           setDupName(asset.name);
           setPhase("duplicate");
@@ -147,6 +156,7 @@ export function SendSheet({ job, onClose }) {
         onClose(sent > 0);
         return;
       }
+      failedRef.current = { index: i, done, sent, uploadId: err?.uploadId };
       setError(err?.message || "Couldn't send that.");
       setPhase("error");
     }
@@ -166,11 +176,17 @@ export function SendSheet({ job, onClose }) {
         <>
           <Ring pct={pct} />
           <Text style={[styles.centerName, { color: theme.ink }]} numberOfLines={1}>{what}</Text>
-          <Text style={[styles.centerMeta, { color: theme.ink2 }]}>
-            {formatBytes(total)} to {host}
-            {assets.length > 1 ? ` · ${progress.index + 1} of ${assets.length}` : ""}
-            {progress.speed ? ` · ${formatBytes(progress.speed)}/s · ${formatEta(progress.eta)}` : ""}
-          </Text>
+          {progress.reconnecting ? (
+            <Text style={[styles.centerMeta, { color: theme.danger }]}>
+              Connection lost. Carrying on from {pct}% as soon as {host} is back…
+            </Text>
+          ) : (
+            <Text style={[styles.centerMeta, { color: theme.ink2 }]}>
+              {formatBytes(total)} to {host}
+              {assets.length > 1 ? ` · ${progress.index + 1} of ${assets.length}` : ""}
+              {progress.speed ? ` · ${formatBytes(progress.speed)}/s · ${formatEta(progress.eta)}` : ""}
+            </Text>
+          )}
           <ClayButton label="Cancel" tone="quiet" onPress={() => cancelRef.current?.()} style={{ marginTop: 18 }} />
         </>
       )}
@@ -190,7 +206,7 @@ export function SendSheet({ job, onClose }) {
             </View>
             <Text style={[styles.doneTitle, display(theme), { color: theme.ink }]}>Delivered to {host}</Text>
             <Text style={[styles.centerMeta, { color: theme.ink2 }]}>
-              {sentCount === assets.length ? what : `${sentCount} of ${assets.length} sent`} · in Downloads\Courier
+              {sentCount === assets.length ? what : `${sentCount} of ${assets.length} sent`} · in Downloads › Courier
             </Text>
           </View>
           <ClayButton label="Done" tone="accent" onPress={() => onClose(true)} style={{ marginTop: 18 }} />
@@ -198,8 +214,8 @@ export function SendSheet({ job, onClose }) {
       )}
       {phase === "error" && (
         <>
-          <SheetTitle sub={error}>Couldn't send it</SheetTitle>
-          <ClayButton label="Try again" tone="accent" onPress={run} />
+          <SheetTitle sub={failedRef.current?.uploadId ? `Stopped at ${pct}%. ${error}` : error}>Couldn't send it</SheetTitle>
+          <ClayButton label={failedRef.current?.uploadId ? "Carry on" : "Try again"} tone="accent" onPress={run} />
           <ClayButton label="Close" onPress={() => onClose(sentCount > 0)} style={{ marginTop: 10 }} />
         </>
       )}
@@ -225,7 +241,7 @@ export function ClipboardSheet({ device, visible, onClose }) {
   async function send() {
     setBusy("send");
     try {
-      await setClipboard(device, mine);
+      await setClipboard(device, mine, "clip");
       await addHistoryEntry({ name: mine.slice(0, 60) || "Clipboard", size: mine.length, category: "text", direction: "sent", hostname: host });
       setMessage({ ok: true, text: `It's on ${host}'s clipboard now.` });
     } catch (err) {
@@ -280,7 +296,7 @@ export function TextSheet({ device, visible, onClose }) {
   async function send() {
     setBusy(true);
     try {
-      await setClipboard(device, text);
+      await setClipboard(device, text, "text");
       await addHistoryEntry({ name: text.slice(0, 60), size: text.length, category: "text", direction: "sent", hostname: host });
       setText("");
       setMessage({ ok: true, text: `Sent. It's on ${host}'s clipboard.` });

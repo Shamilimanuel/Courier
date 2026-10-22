@@ -4,18 +4,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
+import * as Clipboard from "expo-clipboard";
 import { useTheme, useThemedStyles } from "../theme/ThemeContext";
 import { raised, sunken, pressed, filled, display } from "../theme/clay";
 import { ClayButton, IconButton } from "../components/Clay";
 import {
   GearIcon, PlaneIcon, PhotoIcon, FileIcon, ClipboardIcon, TextIcon, CATEGORY_ICONS,
-  DownloadIcon, TrashIcon, CheckIcon, PcIcon, SignalIcon,
+  DownloadIcon, TrashIcon, CheckIcon, PcIcon, SignalIcon, PhoneIcon, CopyIcon,
 } from "../components/icons";
 import UpdateBanner from "../components/UpdateBanner";
 import { SendSheet, ClipboardSheet, TextSheet } from "../components/Sheets";
 import { pingHealth, listFiles, deleteFile, fileDownloadUrl, ApiError } from "../lib/api";
 import { getHistory, addHistoryEntry } from "../lib/history";
 import { formatBytes } from "../lib/upload";
+import { Stop, onStop } from "../lib/stop";
 
 /**
  * Home, laid out like the prototype (docs/app.html): your stops as chips,
@@ -58,11 +60,28 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   const [busyFile, setBusyFile] = useState(null);
   const [sendJob, setSendJob] = useState(null);
   const [sheet, setSheet] = useState(null); // clip | text
+  const [inbox, setInbox] = useState([]);
   const host = activeDevice.hostname || activeDevice.ip;
   const activeOnline = online[activeDevice.id];
+  const activeIsPhone = activeDevice.kind === "phone";
 
   useEffect(() => {
     getHistory().then(setHistory);
+  }, []);
+
+  // What PCs and phones sent here (kept by the phone's own stop, so it
+  // includes what arrived while Courier was closed).
+  function loadInbox() {
+    try {
+      if (Stop) setInbox(Stop.getInbox());
+    } catch {
+      // nothing to show
+    }
+  }
+  useEffect(() => {
+    loadInbox();
+    const offs = [onStop("onFileArrived", loadInbox), onStop("onTextArrived", loadInbox)];
+    return () => offs.forEach((off) => off());
   }, []);
 
   useEffect(() => {
@@ -78,7 +97,10 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
   }, [devices]);
 
   useEffect(() => {
-    if (tab === "receive") loadFiles();
+    if (tab === "receive") {
+      loadInbox();
+      if (!activeIsPhone) loadFiles();
+    }
   }, [tab, activeDevice.id]);
 
   async function refreshHistory() {
@@ -155,6 +177,21 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
     }
   }
 
+  async function openArrival(entry) {
+    if (entry.kind !== "file") {
+      await Clipboard.setStringAsync(entry.text || "");
+      Alert.alert("Courier", "Copied. Paste it anywhere.");
+      return;
+    }
+    const ok = await Stop.openFile(entry.uri, entry.mime || null).catch(() => false);
+    if (!ok) Alert.alert("Courier", "No app on this phone opens this kind of file. It's in Downloads › Courier.");
+  }
+
+  function forget(entry) {
+    Stop?.removeFromInbox(entry.id);
+    loadInbox();
+  }
+
   async function open(entry) {
     try {
       if (entry.uri && (await Sharing.isAvailableAsync())) await Sharing.shareAsync(entry.uri);
@@ -165,6 +202,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
 
   const sent = history.filter((h) => h.direction !== "received").slice(0, 6);
   const arrived = history.filter((h) => h.direction === "received").slice(0, 5);
+  const arrivedHere = inbox.slice(0, 10);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.ground }]} edges={["top", "bottom"]}>
@@ -196,6 +234,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
                 accessibilityState={{ selected: on }}
               >
                 <View style={[styles.dot, { backgroundColor: isOnline == null ? theme.ink3 : isOnline ? theme.moss : theme.danger }]} />
+                {d.kind === "phone" ? <PhoneIcon size={14} color={on ? theme.ink : theme.ink2} strokeWidth={2} /> : <PcIcon size={14} color={on ? theme.ink : theme.ink2} strokeWidth={2} />}
                 <Text style={[styles.chipText, { color: on ? theme.ink : theme.ink2 }]} numberOfLines={1}>{d.hostname || d.ip}</Text>
               </Pressable>
             );
@@ -254,7 +293,42 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
           </>
         ) : (
           <>
-            {arrived.length > 0 && (
+            {Stop && (
+              <>
+                <Text style={[styles.label, label(theme), { color: theme.ink3 }]}>Arrived on this phone</Text>
+                {arrivedHere.length === 0 ? (
+                  <View style={[styles.empty, raised(theme, 0.6), { marginBottom: 20 }]}>
+                    <View style={[styles.emptyIcon, { backgroundColor: theme.clayLo }]}>
+                      <SignalIcon size={22} color={theme.dusk} strokeWidth={1.8} />
+                    </View>
+                    <Text style={[styles.rowName, { color: theme.ink }]}>Nothing yet</Text>
+                    <Text style={[styles.rowMeta, { color: theme.ink2, textAlign: "center" }]}>
+                      When a PC or phone sends you something, it lands in Downloads › Courier and you get a notification.
+                    </Text>
+                  </View>
+                ) : (
+                  arrivedHere.map((h) => (
+                    <View key={h.id} style={[styles.row, raised(theme, 0.6)]}>
+                      <View style={[styles.rowIcon, { backgroundColor: theme.clayLo }]}>
+                        {h.kind === "file" ? <FileIcon size={17} color={theme.dusk} strokeWidth={1.9} /> : <TextIcon size={17} color={theme.dusk} strokeWidth={1.9} />}
+                      </View>
+                      <View style={styles.rowText}>
+                        <Text style={[styles.rowName, { color: theme.ink }]} numberOfLines={1}>{h.kind === "file" ? h.name : h.text}</Text>
+                        <Text style={[styles.rowMeta, { color: theme.ink2 }]} numberOfLines={1}>
+                          {h.from ? `From ${h.from} · ` : ""}{relativeTime(h.at)}{h.kind === "file" ? ` · ${formatBytes(h.size || 0)}` : h.kind === "clip" ? " · clipboard" : ""}
+                        </Text>
+                      </View>
+                      <SmallButton label={h.kind === "file" ? "Open" : "Copy"} onPress={() => openArrival(h)} />
+                      <IconAction label="Remove from this list" onPress={() => forget(h)}>
+                        <TrashIcon size={16} color={theme.ink3} strokeWidth={1.9} />
+                      </IconAction>
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+
+            {!Stop && arrived.length > 0 && (
               <>
                 <Text style={[styles.label, label(theme), { color: theme.ink3 }]}>Arrived on this phone</Text>
                 {arrived.map((h, i) => (
@@ -272,7 +346,8 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
               </>
             )}
 
-            <Text style={[styles.label, label(theme), { color: theme.ink3, marginTop: arrived.length ? 20 : 0 }]}>Waiting on {host}</Text>
+            {!activeIsPhone && (<>
+            <Text style={[styles.label, label(theme), { color: theme.ink3, marginTop: Stop || arrived.length ? 12 : 0 }]}>Waiting on {host}</Text>
             {files === null ? (
               <View style={[styles.empty, raised(theme, 0.6)]}>
                 <ActivityIndicator color={theme.ink2} />
@@ -320,6 +395,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
                 </View>
               ))
             )}
+            </>)}
           </>
         )}
       </ScrollView>

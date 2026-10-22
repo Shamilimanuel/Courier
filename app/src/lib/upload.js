@@ -1,4 +1,5 @@
 import { baseUrl } from "./pairing";
+import { Stop, onStop, targetOf } from "./stop";
 
 /** Distinct from a real failure, so the UI can show "Cancelled" instead of
  * treating a deliberate stop as an error to retry. */
@@ -83,6 +84,74 @@ export function uploadFile(pairing, asset, { onDuplicate, onProgress } = {}) {
   });
 
   return { promise, cancel: () => xhr.abort() };
+}
+
+let nextJob = 1;
+
+/**
+ * Sends one file so that it survives the Wi-Fi dropping out: the other
+ * side keeps what arrived, and the phone asks "how far did you get?" and
+ * carries on from there (app/modules/courier-stop, Uploader.kt). It keeps
+ * going with the app in the background too.
+ *
+ * Progress reports { loaded, total, speed, eta, reconnecting }. A failure
+ * carries err.uploadId when the other side kept the half-sent file: pass it
+ * back as resumeUploadId to carry on. Without the native part (Expo Go), or
+ * to a stop with an older Courier, it falls back to uploadFile above.
+ */
+export function sendFile(pairing, asset, { onDuplicate, onProgress, resumeUploadId } = {}) {
+  if (!Stop) return uploadFile(pairing, asset, { onDuplicate, onProgress });
+
+  const jobId = "j" + nextJob++ + "-" + Date.now();
+  let fallback = null;
+  let unsubscribe = () => {};
+  const startedAt = Date.now();
+  let startedFrom = null;
+
+  const promise = new Promise((resolve, reject) => {
+    const offs = [
+      onStop("onUploadProgress", (e) => {
+        if (e.jobId !== jobId || !onProgress) return;
+        if (startedFrom === null) startedFrom = e.loaded;
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const speed = elapsed > 0.5 ? (e.loaded - startedFrom) / elapsed : 0;
+        const eta = speed > 0 ? (e.total - e.loaded) / speed : null;
+        onProgress({ loaded: e.loaded, total: e.total, speed, eta, reconnecting: !!e.reconnecting });
+      }),
+      onStop("onUploadDone", (e) => {
+        if (e.jobId !== jobId) return;
+        unsubscribe();
+        resolve(e.result || {});
+      }),
+      onStop("onUploadError", (e) => {
+        if (e.jobId !== jobId) return;
+        unsubscribe();
+        if (e.cancelled) return reject(new UploadCancelled());
+        if (e.old) {
+          // An older Courier on the other side: the old way, all at once.
+          fallback = uploadFile(pairing, asset, { onDuplicate, onProgress });
+          fallback.promise.then(resolve, reject);
+          return;
+        }
+        const err = new Error(e.message || "Sending failed");
+        if (e.uploadId) err.uploadId = e.uploadId;
+        reject(err);
+      }),
+    ];
+    unsubscribe = () => offs.forEach((off) => off());
+    try {
+      Stop.upload(jobId, targetOf(pairing), asset.uri, asset.name, Number(asset.size || 0), onDuplicate || null, resumeUploadId || null);
+    } catch (err) {
+      unsubscribe();
+      reject(err);
+    }
+  });
+
+  const cancel = () => {
+    if (fallback) fallback.cancel();
+    else Stop.cancelUpload(jobId);
+  };
+  return { promise, cancel };
 }
 
 export function formatBytes(bytes) {
