@@ -6,11 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder",
-    "postinstall": "npm install --prefix ../agent"
-  },
-  "installConfig": {
-    "installLinks": true
+    "dist": "electron-builder"
   },
   "dependencies": {
     "courier-agent": "file:../agent",
@@ -23,10 +19,19 @@
   "build": {
     "appId": "com.courier.desktop",
     "productName": "Courier",
-    "files": ["src/**/*", "assets/**/*", "node_modules/**/*"],
-    "asarUnpack": ["node_modules/courier-agent/**/*"],
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/courier-agent/**/*"
+    ],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "assets/icon.png"
     },
     "nsis": {
@@ -35,13 +40,19 @@
       "createDesktopShortcut": true
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "assets/icon.png",
       "category": "public.app-category.utilities",
       "identity": null
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "assets/icon.png",
       "category": "Utility"
     }

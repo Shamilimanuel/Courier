@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "PC-side agent for Courier — syncs clipboard/text/files with the phone app",
   "main": "src/index.js",
+  "files": [
+    "src/"
+  ],
   "scripts": {
     "start": "node src/index.js",
     "pair": "node src/pair.js"
