@@ -71,8 +71,10 @@ jobs:
             --notes "Desktop app built from \`${GITHUB_SHA:0:7}\`. Download the file for your OS below. macOS/Linux builds are unsigned — see the README for the first-launch step." \
             2>/dev/null || true
 
-          FILES=$(find dist -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.zip' -o -iname '*.AppImage' -o -iname '*.deb' \))
-          for f in $FILES; do
-            echo "Uploading $f"
-            gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber
-          done
+          # -print0 / read -d '': the Windows installer is "Courier Setup
+          # 1.0.0.exe", and a plain for-loop split it at the spaces.
+          find dist -maxdepth 1 -type f \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.zip' -o -iname '*.AppImage' -o -iname '*.deb' \) -print0 |
+            while IFS= read -r -d '' f; do
+              echo "Uploading $f"
+              gh release upload "$TAG" "$f" --repo "$GITHUB_REPOSITORY" --clobber
+            done

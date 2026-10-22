@@ -2,6 +2,11 @@
   "name": "courier-desktop",
   "version": "1.0.0",
   "description": "Courier desktop tray app — this PC as a stop, and a window to send to other stops",
+  "homepage": "https://github.com/Shamilimanuel/Courier",
+  "author": {
+    "name": "Shamilimanuel",
+    "email": "262878783+Shamilimanuel@users.noreply.github.com"
+  },
   "private": true,
   "main": "src/main.js",
   "scripts": {
