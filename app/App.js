@@ -2,15 +2,22 @@ import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useFonts } from "expo-font";
+import { Cinzel_700Bold } from "@expo-google-fonts/cinzel/700Bold";
+import { BarlowCondensed_700Bold } from "@expo-google-fonts/barlow-condensed/700Bold";
+import { ShareIntentProvider, useShareIntentContext } from "expo-share-intent";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import { getDevices, getActiveDeviceId, setActiveDeviceId } from "./src/lib/pairing";
 import PairScreen from "./src/screens/PairScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import SyncScreen from "./src/screens/SyncScreen";
 import TransferScreen from "./src/screens/TransferScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import ShareScreen from "./src/screens/ShareScreen";
 
 function Root() {
   const { theme } = useTheme();
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const [loading, setLoading] = useState(true);
   const [devices, setDevices] = useState([]);
   const [activeDeviceId, setActiveId] = useState(null);
@@ -65,6 +72,22 @@ function Root() {
     );
   }
 
+  // Something shared from another app ("Share → Courier") wins over whatever
+  // screen was open: pick a stop, send, then back to where it was.
+  if (hasShareIntent && devices.length) {
+    return (
+      <ShareScreen
+        devices={devices}
+        activeDeviceId={activeDeviceId}
+        shareIntent={shareIntent}
+        onClose={() => {
+          resetShareIntent();
+          setScreen("home");
+        }}
+      />
+    );
+  }
+
   if (screen === "pair" || !activeDevice) {
     return <PairScreen onPaired={handlePaired} onBack={devices.length ? () => setScreen("home") : undefined} />;
   }
@@ -80,26 +103,45 @@ function Root() {
       />
     );
   }
+  if (screen === "settings") {
+    return (
+      <SettingsScreen
+        devices={devices}
+        onDevicesChanged={handleDevicesChanged}
+        onBack={() => setScreen("home")}
+      />
+    );
+  }
   return (
     <HomeScreen
       devices={devices}
       activeDevice={activeDevice}
       onSwitchDevice={handleSwitchDevice}
       onAddDevice={() => setScreen("pair")}
-      onDevicesChanged={handleDevicesChanged}
       onNavigate={handleNavigate}
     />
   );
 }
 
+/** Light status-bar text on the dark looks, dark text on the light ones. */
+function ThemedStatusBar() {
+  const { theme } = useTheme();
+  return <StatusBar style={theme.dark ? "light" : "dark"} />;
+}
+
 export default function App() {
+  // Titles in Night & Gold and Airmail. Until they load (a moment, from the
+  // app itself) those titles fall back to the system font.
+  useFonts({ Cinzel_700Bold, BarlowCondensed_700Bold });
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <Root />
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <ShareIntentProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <Root />
+          <ThemedStatusBar />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </ShareIntentProvider>
   );
 }
 

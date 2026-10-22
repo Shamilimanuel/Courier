@@ -2,7 +2,8 @@
   "expo": {
     "name": "Courier",
     "slug": "courier",
-    "version": "1.1.1",
+    "scheme": "courier",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -44,7 +45,21 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": [
+            "text/*",
+            "*/*"
+          ],
+          "androidMultiIntentFilters": [
+            "*/*"
+          ],
+          "disableIOS": true
+        }
+      ],
+      "expo-font"
     ]
   }
 }

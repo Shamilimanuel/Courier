@@ -1,18 +1,16 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Alert, Linking, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useTheme } from "../theme/ThemeContext";
-import { raised, sunken, filled, RADIUS } from "../theme/clay";
+import { useTheme, useThemedStyles } from "../theme/ThemeContext";
+import { raised, sunken, filled, display } from "../theme/clay";
 import { ClayButton, IconButton, CategoryTile } from "../components/Clay";
-import { CATEGORY_ICONS, KebabIcon, SignalIcon, CheckIcon, RefreshIcon } from "../components/icons";
+import { CATEGORY_ICONS, GearIcon, SignalIcon, CheckIcon, RefreshIcon } from "../components/icons";
 import UpdateBanner from "../components/UpdateBanner";
-import { removeDevice } from "../lib/pairing";
 import { pingHealth, listFiles, deleteFile, fileDownloadUrl, ApiError } from "../lib/api";
 import { getHistory, addHistoryEntry } from "../lib/history";
 import { uploadFile, formatBytes } from "../lib/upload";
-import { checkForUpdateDetailed, installedVersionLabel } from "../lib/updates";
 
 const CATEGORIES = [
   { key: "file", label: "File" },
@@ -20,6 +18,11 @@ const CATEGORIES = [
   { key: "text", label: "Text" },
   { key: "app", label: "App" },
 ];
+
+/** Section labels: the look's display face and letter spacing. */
+function label(theme) {
+  return theme.fontDisplay ? { fontFamily: theme.fontDisplay, fontWeight: "normal", fontSize: 12, letterSpacing: theme.labelSpacing } : null;
+}
 
 function relativeTime(at) {
   const seconds = Math.max(0, Math.floor((Date.now() - at) / 1000));
@@ -31,18 +34,16 @@ function relativeTime(at) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAddDevice, onDevicesChanged, onNavigate }) {
+export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAddDevice, onNavigate }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [tab, setTab] = useState("send");
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [online, setOnline] = useState({});
   const [files, setFiles] = useState(null);
   const [filesError, setFilesError] = useState(null);
   const [busyFile, setBusyFile] = useState(null);
   const [savedFiles, setSavedFiles] = useState({});
-  const [updateState, setUpdateState] = useState("idle");
-  const [updateResult, setUpdateResult] = useState(null);
   const [resendingAt, setResendingAt] = useState(null);
 
   useEffect(() => {
@@ -113,20 +114,6 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
     }
   }
 
-  async function handleForget() {
-    setConfirmOpen(false);
-    const remaining = await removeDevice(activeDevice.id);
-    onDevicesChanged(remaining);
-  }
-
-  async function handleCheckUpdate() {
-    setUpdateState("checking");
-    setUpdateResult(null);
-    const outcome = await checkForUpdateDetailed();
-    setUpdateResult(outcome);
-    setUpdateState("idle");
-  }
-
   async function handleResend(entry) {
     if (!entry.uri) {
       Alert.alert("Courier", "Can't resend that — the original file isn't around anymore.");
@@ -166,18 +153,18 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
       <View style={styles.header}>
         <View style={styles.brand}>
           <View style={[styles.brandMark, filled(theme, theme.dusk, theme.duskDeep)]}>
-            <Text style={[styles.brandMarkText, { color: theme.onFill }]}>C</Text>
+            <Text style={[styles.brandMarkText, display(theme), { color: theme.onFill }]}>C</Text>
           </View>
-          <Text style={[styles.brandName, { color: theme.ink }]}>Courier</Text>
+          <Text style={[styles.brandName, display(theme), { color: theme.ink }]}>Courier</Text>
         </View>
-        <IconButton accessibilityLabel="Settings" onPress={() => setConfirmOpen(true)}>
-          <KebabIcon size={17} color={theme.ink2} strokeWidth={1.8} />
+        <IconButton accessibilityLabel="Settings" onPress={() => onNavigate("settings")}>
+          <GearIcon size={18} color={theme.ink2} strokeWidth={1.8} />
         </IconButton>
       </View>
 
       <UpdateBanner />
 
-      <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Your stops</Text>
+      <Text style={[styles.sectionLabel, label(theme), { color: theme.ink3 }]}>Your stops</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -233,7 +220,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
 
       {tab === "send" ? (
         <>
-          <Text style={[styles.sectionLabel, { color: theme.ink3 }]}>Choose what to send</Text>
+          <Text style={[styles.sectionLabel, label(theme), { color: theme.ink3 }]}>Choose what to send</Text>
           <View style={styles.grid}>
             {CATEGORIES.map((cat) => {
               const { Icon, color } = CATEGORY_ICONS[cat.key];
@@ -249,7 +236,7 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
             })}
           </View>
 
-          <Text style={[styles.sectionLabel, { color: theme.ink3, marginTop: 22 }]}>Recent</Text>
+          <Text style={[styles.sectionLabel, label(theme), { color: theme.ink3, marginTop: 22 }]}>Recent</Text>
           {history.length === 0 ? (
             <View style={[styles.emptyCard, raised(theme, 0.8)]}>
               <Text style={[styles.emptyText, { color: theme.ink3 }]}>Nothing sent yet</Text>
@@ -370,79 +357,17 @@ export default function HomeScreen({ devices, activeDevice, onSwitchDevice, onAd
         </View>
       )}
 
-      <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
-        <View style={styles.veil}>
-          <View style={[styles.sheet, { backgroundColor: theme.ground }]}>
-            <Text style={[styles.sheetTitle, { color: theme.ink }]}>Settings</Text>
-
-            <View style={[styles.updateCard, sunken(theme, 0.7)]}>
-              <Text style={[styles.updateLine, { color: theme.ink }]}>
-                Courier {installedVersionLabel()}
-              </Text>
-              {updateResult ? (
-                <Text
-                  style={[
-                    styles.updateStatus,
-                    {
-                      color:
-                        updateResult.state === "available"
-                          ? theme.dusk
-                          : updateResult.state === "error"
-                          ? theme.danger
-                          : theme.moss,
-                    },
-                  ]}
-                >
-                  {updateResult.state === "current"
-                    ? "You're up to date"
-                    : updateResult.state === "available"
-                    ? `${updateResult.info.version} is available`
-                    : updateResult.reason}
-                </Text>
-              ) : (
-                <Text style={[styles.updateHint, { color: theme.ink3 }]}>Also checks itself on open</Text>
-              )}
-              <ClayButton
-                label={updateState === "checking" ? "Checking…" : "Check for updates"}
-                busy={updateState === "checking"}
-                onPress={handleCheckUpdate}
-                style={{ marginTop: 10 }}
-              />
-              {updateResult?.state === "available" && (
-                <ClayButton
-                  label={`Download ${updateResult.info.version}`}
-                  tone="accent"
-                  onPress={() => Linking.openURL(updateResult.info.downloadUrl)}
-                  style={{ marginTop: 8 }}
-                />
-              )}
-            </View>
-
-            <Text style={[styles.sheetSub, { marginTop: 18, color: theme.ink2 }]}>
-              Remove {activeDevice.hostname} from your stops?
-            </Text>
-            <View style={styles.sheetRow}>
-              <View style={{ flex: 1 }}>
-                <ClayButton label="Close" onPress={() => setConfirmOpen(false)} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ClayButton label="Remove stop" tone="danger" onPress={handleForget} />
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => ({
   container: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  brandMark: { width: 34, height: 34, borderRadius: c(11), alignItems: "center", justifyContent: "center" },
   brandMarkText: { fontWeight: "900", fontSize: 15 },
-  brandName: { fontWeight: "800", fontSize: 17 },
+  brandName: { fontWeight: "800", fontSize: 19 },
 
   deviceScroll: { flexGrow: 0, marginBottom: 18 },
   deviceRow: { gap: 8, alignItems: "center" },
@@ -453,51 +378,42 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingVertical: 9,
     paddingHorizontal: 14,
-    borderRadius: 999,
+    borderRadius: c(999),
     maxWidth: 160,
   },
-  deviceDot: { width: 7, height: 7, borderRadius: 4 },
+  deviceDot: { width: 7, height: 7, borderRadius: c(4) },
   deviceChipText: { fontWeight: "800", fontSize: 12.5 },
 
-  tabs: { flexDirection: "row", gap: 4, padding: 4, borderRadius: 16, marginBottom: 18 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: "center" },
+  tabs: { flexDirection: "row", gap: 4, padding: 4, borderRadius: c(16), marginBottom: 18 },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: c(12), alignItems: "center" },
   tabLabel: { fontWeight: "800", fontSize: 13 },
 
   sectionLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 10 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
 
-  emptyCard: { borderRadius: 16, paddingVertical: 22, alignItems: "center", justifyContent: "center" },
+  emptyCard: { borderRadius: c(16), paddingVertical: 22, alignItems: "center", justifyContent: "center" },
   emptyText: { fontSize: 12.5, fontWeight: "700" },
 
   recentScroll: { flexGrow: 0 },
   recentRow: { gap: 10, paddingRight: 4, alignItems: "center" },
-  recentChip: { width: 118, borderRadius: 16, padding: 10, alignSelf: "flex-start" },
+  recentChip: { width: 118, borderRadius: c(16), padding: 10, alignSelf: "flex-start" },
   recentTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  recentIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  recentIcon: { width: 28, height: 28, borderRadius: c(9), alignItems: "center", justifyContent: "center" },
   recentName: { fontSize: 11.5, fontWeight: "800" },
   recentMeta: { fontSize: 10, fontWeight: "600", marginTop: 2 },
   recentTarget: { fontSize: 9.5, fontWeight: "600", marginTop: 1 },
 
   receivePane: { flex: 1, alignItems: "center", paddingHorizontal: 0 },
-  radarCore: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 18, marginTop: 30 },
+  radarCore: { width: 64, height: 64, borderRadius: c(32), alignItems: "center", justifyContent: "center", marginBottom: 18, marginTop: 30 },
   receiveTitle: { fontWeight: "800", fontSize: 15, marginBottom: 6, textAlign: "center" },
   receiveSub: { fontSize: 12.5, lineHeight: 18, textAlign: "center" },
 
-  fileRow: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, padding: 12 },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: c(16), padding: 12 },
   fileName: { fontWeight: "800", fontSize: 12.5 },
   fileMeta: { fontSize: 10.5, fontWeight: "600", marginTop: 2 },
   fileActions: { flexDirection: "row", gap: 6 },
   fileBtn: { width: 78, paddingVertical: 9 },
-  checkDot: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  checkDot: { width: 22, height: 22, borderRadius: c(11), alignItems: "center", justifyContent: "center" },
 
-  updateCard: { borderRadius: 16, padding: 14, marginTop: 4 },
-  updateLine: { fontWeight: "800", fontSize: 14 },
-  updateStatus: { fontSize: 12, fontWeight: "700", marginTop: 4 },
-  updateHint: { fontSize: 11.5, fontWeight: "600", marginTop: 4 },
 
-  veil: { flex: 1, backgroundColor: "rgba(20,14,30,0.4)", justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: RADIUS.sheet, borderTopRightRadius: RADIUS.sheet, padding: 22, paddingBottom: 34 },
-  sheetTitle: { fontSize: 16, fontWeight: "800", marginBottom: 6 },
-  sheetSub: { fontSize: 13, marginBottom: 18 },
-  sheetRow: { flexDirection: "row", gap: 10 },
 });

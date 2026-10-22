@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, Pressable, StyleSheet, Linking } from "react-native";
-import { useTheme } from "../theme/ThemeContext";
+import { useTheme, useThemedStyles } from "../theme/ThemeContext";
 import { RADIUS, raised, filled } from "../theme/clay";
 import { checkForUpdate } from "../lib/updates";
 
@@ -9,6 +9,7 @@ import { checkForUpdate } from "../lib/updates";
  * out why, this is just the passive nudge when there's good news. */
 export default function UpdateBanner() {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [update, setUpdate] = useState(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -44,12 +45,12 @@ export default function UpdateBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => ({
   banner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    borderRadius: RADIUS.field,
+    borderRadius: c(RADIUS.field),
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginBottom: 14,
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0 },
   title: { fontWeight: "800", fontSize: 13 },
   subtitle: { fontSize: 10.5, marginTop: 2, fontWeight: "600" },
-  action: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },
+  action: { borderRadius: c(16), paddingHorizontal: 14, paddingVertical: 7 },
   actionText: { fontWeight: "800", fontSize: 12.5 },
   dismiss: { fontSize: 15, paddingHorizontal: 2 },
 });

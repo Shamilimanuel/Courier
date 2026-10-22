@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Modal, Pressable } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useTheme } from "../theme/ThemeContext";
+import { useTheme, useThemedStyles } from "../theme/ThemeContext";
 import { IconButton, ClayButton } from "./Clay";
 import { BackIcon } from "./icons";
 
 /** Full-screen QR scanner for reading the pairing code shown by the agent. */
 export default function QRScanner({ visible, onClose, onScanned }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
 
@@ -64,7 +65,7 @@ export default function QRScanner({ visible, onClose, onScanned }) {
 
 const FRAME_SIZE = 240;
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => ({
   container: { flex: 1 },
   backRow: { position: "absolute", top: 56, left: 24 },
   frame: {
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
     marginTop: -FRAME_SIZE / 2 - 30,
     borderWidth: 3,
     borderColor: "rgba(255,255,255,0.85)",
-    borderRadius: 20,
+    borderRadius: c(20),
   },
   caption: {
     position: "absolute",

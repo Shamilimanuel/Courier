@@ -44,6 +44,7 @@
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
     if (name === "receive") { loadLocalFiles(); loadRemoteFiles(); }
     if (name === "pair") { loadPairingInfo(); renderStopsList(); }
+    if (name === "settings") loadSettingsPanel();
   }
   $("tabs").addEventListener("click", (e) => {
     const btn = e.target.closest(".tab");
@@ -396,27 +397,92 @@
   async function checkForUpdate() {
     try {
       const version = await window.courier.getAppVersion();
+      return await findUpdate(version);
+    } catch {
+      // stays quiet on failure, same as the phone app's UpdateBanner
+      return { state: "error" };
+    }
+  }
+
+  async function findUpdate(version) {
+    {
       const res = await fetch("https://api.github.com/repos/Shamilimanuel/Courier/releases", {
         headers: { Accept: "application/vnd.github+json" },
       });
-      if (!res.ok) return;
+      if (!res.ok) return { state: "error" };
       const releases = await res.json();
       const desktopReleases = (releases || []).filter((r) => r.tag_name && r.tag_name.startsWith("desktop-v"));
-      if (!desktopReleases.length) return;
+      if (!desktopReleases.length) return { state: "current" };
       const latest = desktopReleases[0];
       const there = parseVersion(latest.tag_name.replace(/^desktop-v/, ""));
       const here = parseVersion(version);
-      if (!there || !here || compareVersion(there, here) <= 0) return;
-      const exe = (latest.assets || []).find((a) => /\.exe$/i.test(a.name) && !/portable/i.test(a.name));
-      if (!exe) return;
+      if (!there || !here || compareVersion(there, here) <= 0) return { state: "current" };
+      // The installer, not the portable exe: electron-builder names them
+      // "Courier Setup 1.0.0.exe" and "Courier 1.0.0.exe" (dots on GitHub).
+      const exes = (latest.assets || []).filter((a) => /\.exe$/i.test(a.name));
+      const exe = exes.find((a) => /setup/i.test(a.name)) || exes[0];
+      if (!exe) return { state: "current" };
       $("updateTitle").textContent = "Courier " + latest.tag_name.replace(/^desktop-v/, "") + " is out";
       $("updateBanner").classList.remove("hidden");
       $("updateGetBtn").onclick = () => window.courier.openExternal(exe.browser_download_url);
-    } catch {
-      // stays quiet on failure, same as the phone app's UpdateBanner
+      return { state: "available", version: latest.tag_name.replace(/^desktop-v/, ""), url: exe.browser_download_url };
     }
   }
   $("updateDismissBtn").addEventListener("click", () => $("updateBanner").classList.add("hidden"));
+
+  // --------------------------------------------------------------- looks --
+  // The same six as the phone app. Kept in this window's own storage, so it
+  // survives restarts; nothing else needs to know.
+  const LOOKS = [
+    { id: "dawn", label: "Dawn", family: "clay", sw: ["#DED6F0", "#7B6BE8"] },
+    { id: "dusk", label: "Dusk", family: "clay", sw: ["#2A2036", "#A48BFF"] },
+    { id: "midnight", label: "Midnight", family: "clay", sw: ["#12151F", "#5D8BFF"] },
+    { id: "gold", label: "Night & Gold", family: "gold", sw: ["#0C1220", "#D8B266"] },
+    { id: "airmail", label: "Airmail", family: "post", sw: ["#E8EDF3", "#C4392D"] },
+    { id: "airnight", label: "Airmail Night", family: "post", sw: ["#131B2C", "#E2584C"] },
+  ];
+  function applyLook(id) {
+    const look = LOOKS.find((l) => l.id === id) || LOOKS[0];
+    document.documentElement.dataset.theme = look.id;
+    document.documentElement.dataset.family = look.family;
+    try { localStorage.setItem("courier.theme", look.id); } catch {}
+    renderThemeGrid();
+  }
+  function renderThemeGrid() {
+    const current = document.documentElement.dataset.theme;
+    $("themeGrid").innerHTML = LOOKS.map((l) =>
+      `<button class="themeChip${l.id === current ? " active" : ""}" data-look="${l.id}">` +
+      `<span class="swatch" style="background:linear-gradient(135deg,${l.sw[0]} 50%,${l.sw[1]} 50%)"></span>${escapeHtml(l.label)}</button>`
+    ).join("");
+  }
+  $("themeGrid").addEventListener("click", (e) => {
+    const chip = e.target.closest(".themeChip");
+    if (chip) applyLook(chip.dataset.look);
+  });
+  let saved = null;
+  try { saved = localStorage.getItem("courier.theme"); } catch {}
+  applyLook(saved);
+
+  // ------------------------------------------------------------ settings --
+  async function loadSettingsPanel() {
+    const settings = await window.courier.getSettings();
+    $("setFolder").textContent = settings.destDir;
+    $("setVersion").textContent = "Courier Desktop " + (await window.courier.getAppVersion());
+  }
+  $("setFolderBtn").addEventListener("click", () => {
+    window.courier.chooseDownloadFolder().then((dir) => {
+      if (dir) { showToast("Download folder updated"); loadSettingsPanel(); loadLocalFiles(); }
+    });
+  });
+  $("setUpdateBtn").addEventListener("click", async () => {
+    const hint = $("setUpdateHint");
+    hint.className = "setHint";
+    hint.textContent = "Checking…";
+    const found = await checkForUpdate();
+    if (found.state === "available") { hint.className = "setHint news"; hint.textContent = found.version + " is available: see the banner at the top"; }
+    else if (found.state === "current") { hint.className = "setHint ok"; hint.textContent = "You're up to date"; }
+    else { hint.className = "setHint bad"; hint.textContent = "Couldn't reach GitHub. Try again later."; }
+  });
 
   // ------------------------------------------------------------ tray nav --
   window.courier.onNavigate((tab) => switchTab(tab));

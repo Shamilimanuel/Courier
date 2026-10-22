@@ -27,6 +27,7 @@
       <button class="tab active" data-tab="send">Send</button>
       <button class="tab" data-tab="receive">Receive</button>
       <button class="tab" data-tab="pair">Pair</button>
+      <button class="tab" data-tab="settings">Settings</button>
     </nav>
 
     <section class="panel" id="panel-send">
@@ -81,6 +82,23 @@
 
       <div class="divider">Your stops</div>
       <div id="stopsList" class="fileList"></div>
+    </section>
+
+    <section class="panel hidden" id="panel-settings">
+      <div class="divider" style="margin-top:0;">Look</div>
+      <div class="themeGrid" id="themeGrid"></div>
+
+      <div class="divider">Files that arrive go to</div>
+      <div class="setRow">
+        <div class="grow"><div class="setTitle" id="setFolder"></div><div class="setHint">Opened when you click Open on a received file</div></div>
+        <button class="btn" id="setFolderBtn">Change</button>
+      </div>
+
+      <div class="divider">About</div>
+      <div class="setRow">
+        <div class="grow"><div class="setTitle" id="setVersion">Courier Desktop</div><div class="setHint" id="setUpdateHint">Also checks itself when Courier starts</div></div>
+        <button class="btn" id="setUpdateBtn">Check</button>
+      </div>
     </section>
 
     <div class="toast" id="toast"></div>

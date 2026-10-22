@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
-import { useTheme } from "../theme/ThemeContext";
-import { raised, sunken, pressed, filled, RADIUS } from "../theme/clay";
+import { useTheme, useThemedStyles } from "../theme/ThemeContext";
+import { raised, sunken, pressed, filled, corner, RADIUS } from "../theme/clay";
 
 /** A raised or sunken block — the base every other clay element sits on. */
 export function Surface({ style, children, inset, scale }) {
@@ -12,6 +12,7 @@ export function Surface({ style, children, inset, scale }) {
 /** A full-width button — Pair, Send, Unpair. */
 export function ClayButton({ label, onPress, tone = "plain", busy, disabled, style }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [down, setDown] = useState(false);
 
   const base =
@@ -48,6 +49,7 @@ export function ClayButton({ label, onPress, tone = "plain", busy, disabled, sty
 /** A small square icon button — settings, back. */
 export function IconButton({ children, onPress, style, accessibilityLabel }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [down, setDown] = useState(false);
   return (
     <Pressable
@@ -66,12 +68,13 @@ export function IconButton({ children, onPress, style, accessibilityLabel }) {
 /** A sunken text field. */
 export function ClayField({ style, multiline, ...props }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <TextInput
       style={[
         styles.field,
         sunken(theme),
-        { color: theme.ink, borderRadius: RADIUS.field },
+        { color: theme.ink, borderRadius: corner(theme, RADIUS.field) },
         multiline && styles.fieldMultiline,
         style,
       ]}
@@ -85,6 +88,7 @@ export function ClayField({ style, multiline, ...props }) {
 /** A small sunken pill with a status dot — "Connected to X". */
 export function StatusPill({ label, tone = "ok" }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const dotColour = tone === "ok" ? theme.moss : theme.danger;
   return (
     <View style={[styles.statusPill, sunken(theme, 0.6)]}>
@@ -99,6 +103,7 @@ export function StatusPill({ label, tone = "ok" }) {
 /** One tile in the Send category grid. */
 export function CategoryTile({ label, Icon, color, onPress }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [down, setDown] = useState(false);
   return (
     <Pressable
@@ -117,9 +122,9 @@ export function CategoryTile({ label, Icon, color, onPress }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => ({
   button: {
-    borderRadius: RADIUS.field,
+    borderRadius: c(RADIUS.field),
     paddingVertical: 15,
     paddingHorizontal: 18,
     alignItems: "center",
@@ -131,7 +136,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 38,
     height: 38,
-    borderRadius: 13,
+    borderRadius: c(13),
     alignItems: "center",
     justifyContent: "center",
   },
@@ -152,16 +157,16 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: RADIUS.pill,
+    borderRadius: c(RADIUS.pill),
     marginTop: 3,
   },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusDot: { width: 6, height: 6, borderRadius: c(3) },
   statusLabel: { fontSize: 10.5, fontWeight: "700" },
 
   catTile: {
     flex: 1,
     aspectRatio: 1.05,
-    borderRadius: 22,
+    borderRadius: c(22),
     alignItems: "center",
     justifyContent: "center",
     gap: 9,
@@ -169,7 +174,7 @@ const styles = StyleSheet.create({
   catIcon: {
     width: 46,
     height: 46,
-    borderRadius: 15,
+    borderRadius: c(15),
     alignItems: "center",
     justifyContent: "center",
   },

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeContext";
+import { display } from "../theme/clay";
 import { ClayField, ClayButton, IconButton } from "../components/Clay";
 import QRScanner from "../components/QRScanner";
 import { addDevice } from "../lib/pairing";
@@ -94,7 +95,7 @@ export default function PairScreen({ onPaired, onBack }) {
         </View>
       )}
 
-      <Text style={[styles.title, { color: theme.ink }]}>
+      <Text style={[styles.title, display(theme), { color: theme.ink }]}>
         {onBack ? "Add a stop" : "Add your first stop"}
       </Text>
       <Text style={[styles.subtitle, { color: theme.ink2 }]}>

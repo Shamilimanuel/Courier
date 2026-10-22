@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from "react";
+import { StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { THEMES } from "./clay";
+import { THEMES, corner } from "./clay";
 
 const STORAGE_KEY = "courier.theme";
 const DEFAULT_THEME = "dawn";
@@ -36,4 +37,13 @@ export function ThemeProvider({ children }) {
 
 export function useTheme() {
   return useContext(ThemeContext);
+}
+
+/**
+ * A file's styles, rebuilt when the look changes. `make` gets c(r), which
+ * turns a clay radius into this look's corner, and the theme itself.
+ */
+export function useThemedStyles(make) {
+  const { theme } = useTheme();
+  return useMemo(() => StyleSheet.create(make((r) => corner(theme, r), theme)), [theme, make]);
 }

@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
-import { useTheme } from "../theme/ThemeContext";
-import { raised, sunken } from "../theme/clay";
+import { useTheme, useThemedStyles } from "../theme/ThemeContext";
+import { raised, sunken, display } from "../theme/clay";
 import { ClayButton, IconButton } from "../components/Clay";
 import { CATEGORY_ICONS, BackIcon, CheckIcon } from "../components/icons";
 import { uploadFile, formatBytes, formatEta, UploadCancelled } from "../lib/upload";
@@ -25,6 +25,7 @@ let nextId = 1;
 
 export default function TransferScreen({ category, pairing, onBack }) {
   const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const copy = COPY[category] || COPY.file;
   const { Icon, color } = CATEGORY_ICONS[category] || CATEGORY_ICONS.file;
   const [items, setItems] = useState([]);
@@ -108,7 +109,7 @@ export default function TransferScreen({ category, pairing, onBack }) {
         <IconButton accessibilityLabel="Back" onPress={onBack}>
           <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
         </IconButton>
-        <Text style={[styles.title, { color: theme.ink }]}>{copy.title}</Text>
+        <Text style={[styles.title, display(theme), { color: theme.ink }]}>{copy.title}</Text>
       </View>
 
       <ClayButton label={`Choose ${copy.hint.toLowerCase()}`} onPress={pick} style={{ marginTop: 16 }} />
@@ -147,6 +148,7 @@ export default function TransferScreen({ category, pairing, onBack }) {
 }
 
 function TransferItem({ item, color, Icon, onUpload, onCancel, theme }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.item, raised(theme, 0.8)]}>
       <View style={styles.itemRow}>
@@ -218,7 +220,7 @@ function statusLine(item) {
   return "";
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c) => ({
   container: { flex: 1, paddingHorizontal: 22, paddingTop: 12, paddingBottom: 16 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
   title: { fontWeight: "800", fontSize: 17 },
@@ -227,15 +229,15 @@ const styles = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyText: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 19 },
 
-  item: { borderRadius: 16, padding: 12 },
+  item: { borderRadius: c(16), padding: 12 },
   itemRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  itemIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  itemIcon: { width: 28, height: 28, borderRadius: c(9), alignItems: "center", justifyContent: "center" },
   itemName: { fontWeight: "800", fontSize: 12.5 },
   itemMeta: { fontSize: 10.5, fontWeight: "600", marginTop: 1 },
-  checkDot: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  checkDot: { width: 20, height: 20, borderRadius: c(10), alignItems: "center", justifyContent: "center" },
 
-  progressTrack: { height: 8, borderRadius: 999, overflow: "hidden", marginTop: 9 },
-  progressFill: { height: "100%", borderRadius: 999 },
+  progressTrack: { height: 8, borderRadius: c(999), overflow: "hidden", marginTop: 9 },
+  progressFill: { height: "100%", borderRadius: c(999) },
 
   duplicateRow: { flexDirection: "row", gap: 8, marginTop: 10 },
 });

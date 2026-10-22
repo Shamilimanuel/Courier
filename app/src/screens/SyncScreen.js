@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { useTheme } from "../theme/ThemeContext";
+import { display } from "../theme/clay";
 import { ClayField, ClayButton, IconButton } from "../components/Clay";
 import { BackIcon } from "../components/icons";
 import { getClipboard, setClipboard, ApiError } from "../lib/api";
@@ -63,7 +64,7 @@ export default function SyncScreen({ pairing, onBack }) {
           <BackIcon size={17} color={theme.ink} strokeWidth={2.2} />
         </IconButton>
         <View>
-          <Text style={[styles.title, { color: theme.ink }]}>Text</Text>
+          <Text style={[styles.title, display(theme), { color: theme.ink }]}>Text</Text>
           <Text style={[styles.subtitle, { color: theme.ink3 }]}>
             {pairing.ip}:{pairing.port}
           </Text>
