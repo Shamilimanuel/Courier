@@ -18,7 +18,7 @@ Courier/
 
 ## Running it
 
-**Fastest: install the agent with one command**
+**Fastest: one command** (Windows)
 
 In PowerShell on the PC you want to turn into a stop:
 
@@ -26,10 +26,13 @@ In PowerShell on the PC you want to turn into a stop:
 irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1 | iex
 ```
 
-Installs Node if it's missing, sets the agent to start hidden at login, and
-finishes with a QR code — scan it with the app to pair, or with any camera
-app to get a download link if the app isn't installed yet. Re-run the same
-command any time to update, repair, show the code again, or remove it.
+Installs the desktop app from the newest release, quietly and just for you
+(no administrator rights), and opens it. After that, `courier` in PowerShell,
+cmd or Win+R opens the window; running the line again (or `courier -Setup`)
+gives a menu to update, open or remove it. A PC that had the older
+window-less agent keeps its pairing token. That agent is still available:
+`& ([scriptblock]::Create((irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1))) -Agent`
+installs Node if needed, starts it hidden at login and prints a QR code.
 
 **Or by hand**
 

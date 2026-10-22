@@ -1,30 +1,37 @@
 <#
-    Courier -- one-line setup for the PC agent.
+    Courier -- one-line setup, the same way Reveille does it.
 
         irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1 | iex
 
-    Installs the agent under %LOCALAPPDATA%\Courier, makes it start when you
-    log in, and finishes by printing the pairing details for the phone.
+    Installs the Courier desktop app (the tray app with a window) from the
+    newest GitHub release, quietly and just for you -- no administrator
+    rights. Adds a `courier` command: type it in PowerShell, cmd or Win+R and
+    the window opens. Run the line again for a menu: update, open, remove.
 
-    No administrator rights needed -- the agent only ever does what your own
-    session could already do (read/write the clipboard, save files to your
-    Downloads folder).
+    A PC that had the older window-less agent keeps its pairing token: the
+    desktop app reads the same config.json, so phones don't re-pair. The
+    agent's start-at-login task is removed, because both would want the same
+    port.
 
     Options (these need the longer form, because `iex` cannot take arguments):
 
         & ([scriptblock]::Create((irm <url>))) -Uninstall
-        & ([scriptblock]::Create((irm <url>))) -Path 'D:\somewhere'
-        & ([scriptblock]::Create((irm <url>))) -NoAutoStart
-        & ([scriptblock]::Create((irm <url>))) -NoPair
+        & ([scriptblock]::Create((irm <url>))) -Agent          the window-less agent instead
+        & ([scriptblock]::Create((irm <url>))) -Agent -Path 'D:\somewhere'
+        & ([scriptblock]::Create((irm <url>))) -Agent -NoAutoStart
+        & ([scriptblock]::Create((irm <url>))) -Agent -NoPair
 
-    Re-running it upgrades in place and keeps your existing token, so the
-    phone does not need re-pairing.
+    The window-less agent (-Agent) installs under %LOCALAPPDATA%\Courier,
+    starts when you log in and prints the pairing details; re-running it
+    upgrades in place and keeps the token.
 #>
 
 [CmdletBinding()]
 param(
-    # Remove the agent, its scheduled task and its files.
+    # Remove Courier: the desktop app, the agent, the command and their files.
     [switch]$Uninstall,
+    # Install the window-less agent instead of the desktop app.
+    [switch]$Agent,
     # Where to install. Defaults to %LOCALAPPDATA%\Courier.
     [string]$Path,
     # Skip printing the pairing code at the end.
@@ -94,11 +101,171 @@ function Write-Banner {
     Write-Host ''
 }
 
+# ------------------------------------------------------------ desktop app --
+
+$CommandFile = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\courier.cmd'
+
+# The installed desktop app, from the entry its installer writes for
+# Settings > Apps, or $null.
+function Get-DesktopInstall {
+    $keys = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue
+    foreach ($k in $keys) {
+        $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+        if ($p.DisplayName -notlike 'Courier*') { continue }
+        # electron-builder leaves InstallLocation empty; DisplayIcon is
+        # "...\Courier.exe,0".
+        $exe = ([string]$p.DisplayIcon -replace ',\d+$', '').Trim('"')
+        if (-not $exe -or -not (Test-Path $exe)) { continue }
+        return [pscustomobject]@{
+            Version   = [string]$p.DisplayVersion
+            Dir       = Split-Path $exe
+            Exe       = $exe
+            Uninstall = if ($p.QuietUninstallString) { $p.QuietUninstallString } else { [string]$p.UninstallString }
+        }
+    }
+    $null
+}
+
+# The newest desktop release on GitHub: its version and the installer's
+# address. electron-builder makes "Courier Setup 1.1.0.exe" (the installer)
+# and "Courier 1.1.0.exe" (portable); GitHub turns the spaces into dots.
+function Get-LatestDesktopRelease {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $releases = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases" -Headers @{ Accept = 'application/vnd.github+json' } -UseBasicParsing
+    foreach ($r in @($releases)) {
+        if ($r.tag_name -notlike 'desktop-v*' -or $r.draft -or $r.prerelease) { continue }
+        $exe = @($r.assets | Where-Object { $_.name -match '\.exe$' -and $_.name -match 'setup' }) | Select-Object -First 1
+        if ($exe) {
+            return [pscustomobject]@{ Version = $r.tag_name -replace '^desktop-v', ''; Url = $exe.browser_download_url; Name = $exe.name; Size = $exe.size }
+        }
+    }
+    throw 'GitHub has no desktop installer yet. Try again in a few minutes.'
+}
+
+# The older window-less agent: its start-at-login task goes, its config.json
+# (the pairing token) stays for the desktop app to pick up.
+function Remove-AgentTask {
+    if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) { return }
+    Write-Step 'Turning off the older window-less agent (your pairing stays)...'
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Stop-WhateverHoldsThePort -Port (Read-AgentPort -Destination $InstallDir)
+}
+
+# `courier` in PowerShell, cmd or Win+R. WindowsApps is already on the PATH.
+# `courier -Setup` runs this setup again (the menu).
+function Set-CourierCommand {
+    param([string]$Exe)
+    $lines = @(
+        '@echo off'
+        'rem Courier. Made by the one-line setup; run it again (or: courier -Setup) to update or remove.'
+        'if /i "%~1"=="-Setup" ('
+        "    powershell.exe -NoProfile -Command `"irm github.com/$Repo/raw/$Branch/setup.ps1 | iex`""
+        '    goto :eof'
+        ')'
+        "start `"`" `"$Exe`" --show"
+    )
+    New-Item -ItemType Directory -Force -Path (Split-Path $CommandFile) | Out-Null
+    [IO.File]::WriteAllText($CommandFile, (($lines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+}
+
+function Install-Desktop {
+    $release = Get-LatestDesktopRelease
+    $file = Join-Path $env:TEMP ("courier-setup-" + $release.Version + ".exe")
+    Write-Step ("Downloading Courier {0} ({1:N0} MB)..." -f $release.Version, ($release.Size / 1MB))
+    Invoke-WebRequest $release.Url -OutFile $file -UseBasicParsing
+
+    Remove-AgentTask
+
+    # The installer cannot replace a running app.
+    Get-Process -Name 'Courier' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Step 'Installing it, just for you...'
+    $p = Start-Process -FilePath $file -ArgumentList '/S', '/currentuser' -PassThru -Wait
+    Remove-Item $file -Force -ErrorAction SilentlyContinue
+    if ($p.ExitCode -ne 0) { throw "The installer stopped with code $($p.ExitCode)." }
+
+    $installed = Get-DesktopInstall
+    if (-not $installed) { throw 'The installer finished, but Courier is not where it should be.' }
+    Set-CourierCommand -Exe $installed.Exe
+    $installed
+}
+
+function Remove-Desktop {
+    $installed = Get-DesktopInstall
+    if ($installed) {
+        Get-Process -Name 'Courier' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Step 'Removing the desktop app...'
+        $cmd = $installed.Uninstall
+        if ($cmd -match '^"([^"]+)"\s*(.*)$') { $exe = $Matches[1]; $uargs = $Matches[2] } else { $exe = $cmd; $uargs = '' }
+        if ($uargs -notmatch '/S') { $uargs = ($uargs + ' /S').Trim() }
+        Start-Process -FilePath $exe -ArgumentList $uargs -Wait
+        # The uninstaller hands over to a copy of itself and returns at once;
+        # wait for the app to be gone, then take the empty folder too.
+        for ($n = 0; $n -lt 60 -and (Test-Path $installed.Exe); $n++) { Start-Sleep -Milliseconds 500 }
+        if ((Test-Path $installed.Dir) -and -not (Get-ChildItem $installed.Dir -Force)) { Remove-Item $installed.Dir -Force }
+        Remove-Item 'HKCU:\Software\Classes\*\shell\SendWithCourier' -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $CommandFile) { Remove-Item $CommandFile -Force }
+}
+
+function Show-DesktopMenu {
+    param($Installed, $Latest)
+    Write-Host ("  Courier {0} is installed." -f $Installed.Version) -ForegroundColor White
+    if ($Latest -and $Latest.Version -ne $Installed.Version) { Write-Ok ("  Version {0} is out." -f $Latest.Version) }
+    elseif ($Latest) { Write-Dim '  That is the newest version.' }
+    Write-Host ''
+    Write-Host ('   1  ' + $(if ($Latest -and $Latest.Version -ne $Installed.Version) { "Update to $($Latest.Version)" } else { 'Reinstall (repair)' })) -ForegroundColor White
+    Write-Host '   2  Open Courier' -ForegroundColor White
+    Write-Host '   3  Remove Courier' -ForegroundColor White
+    Write-Host '   Q  Quit' -ForegroundColor White
+    Write-Host ''
+    switch ((Read-Host '  Choose').Trim().ToUpper()) {
+        '1' { 'install' }
+        '2' { 'open' }
+        '3' { 'remove' }
+        default { 'quit' }
+    }
+}
+
+function Invoke-Desktop {
+    Write-Banner
+    $installed = Get-DesktopInstall
+    if ($installed -and [Environment]::UserInteractive) {
+        $latest = $null
+        try { $latest = Get-LatestDesktopRelease } catch { }
+        switch (Show-DesktopMenu -Installed $installed -Latest $latest) {
+            'open'   { Start-Process $installed.Exe -ArgumentList '--show'; Write-Host ''; return }
+            'remove' { Invoke-Uninstall; return }
+            'quit'   { Write-Host ''; return }
+        }
+        Write-Host ''
+    }
+
+    $installed = Install-Desktop
+    Start-Process $installed.Exe -ArgumentList '--show'
+
+    Write-Host ''
+    Write-Ok ("Done. Courier {0} is open." -f $installed.Version)
+    Write-Host ''
+    Write-Host '  From now on:' -ForegroundColor White
+    Write-Dim '  courier          opens the window (it also starts with Windows, in the tray)'
+    Write-Dim '  courier -Setup   update or remove'
+    Write-Host ''
+    Write-Host '  If Windows asks whether Courier may use the network, allow it' -ForegroundColor White
+    Write-Dim '  for private networks: that is how your phone reaches this PC.'
+    Write-Host ''
+    Write-Host '  Pair your phone under Pair in the window. The Android app:' -ForegroundColor White
+    Write-Dim "  https://github.com/$Repo/releases/latest"
+    Write-Host ''
+}
+
 # ---------------------------------------------------------------- uninstall --
 
 function Invoke-Uninstall {
     Write-Banner
     Write-Step 'Removing Courier...'
+
+    Remove-Desktop
 
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -345,6 +512,18 @@ function Show-PairingCode {
 # ---------------------------------------------------------------------- main --
 
 if ($Uninstall) { Invoke-Uninstall; return }
+
+# The desktop app, unless the window-less agent was asked for.
+if (-not $Agent) {
+    try { Invoke-Desktop }
+    catch {
+        Write-Host ''
+        Write-Warn2 "That did not work: $($_.Exception.Message)"
+        Write-Dim 'Run the same line again, or use the window-less agent: add -Agent (see the top of setup.ps1).'
+        Write-Host ''
+    }
+    return
+}
 
 Write-Banner
 

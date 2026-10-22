@@ -248,8 +248,11 @@ if (!gotLock) {
       // Launched via "Send with Courier" — show the window instead of the
       // usual hidden-in-the-tray start.
       win.webContents.once("did-finish-load", () => win.webContents.send("preselect-file", filePath));
-    } else {
-      win.once("ready-to-show", () => win.hide()); // starts hidden in the tray, like the headless agent
+    } else if (!process.argv.includes("--show")) {
+      // Starts hidden in the tray, like the headless agent. --show (the
+      // `courier` command, and setup.ps1 right after installing) opens the
+      // window instead; starting with Windows passes nothing.
+      win.once("ready-to-show", () => win.hide());
     }
 
     app.setLoginItemSettings({ openAtLogin: true });
