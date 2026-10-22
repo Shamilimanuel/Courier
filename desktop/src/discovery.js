@@ -16,6 +16,8 @@ const { Bonjour } = require("bonjour-service");
  */
 
 const SERVICE_TYPE = "courier";
+// Courier's usual port: other stops listen there unless it was taken.
+const DEFAULT_PORT = 5544;
 const SWEEP_TIMEOUT_MS = 700;
 const SWEEP_PARALLEL = 48;
 
@@ -95,7 +97,6 @@ function createDiscovery({ self, onChange }) {
     if (sweeping) return;
     sweeping = true;
     try {
-      const me = self();
       for (const net of lanAddresses()) {
         // Only the common home-network size (255.255.255.0); a bigger
         // network would mean thousands of knocks.
@@ -110,9 +111,9 @@ function createDiscovery({ self, onChange }) {
           if (!browser) return; // stopped meanwhile
           await Promise.all(
             targets.slice(i, i + SWEEP_PARALLEL).map(async (ip) => {
-              const h = await getHealth(ip, me.port, SWEEP_TIMEOUT_MS);
+              const h = await getHealth(ip, DEFAULT_PORT, SWEEP_TIMEOUT_MS);
               if (h && h.api >= 2 && h.id) {
-                remember({ id: h.id, name: h.name || h.hostname || ip, kind: h.kind === "phone" ? "phone" : "pc", ip, port: me.port, securePort: h.securePort });
+                remember({ id: h.id, name: h.name || h.hostname || ip, kind: h.kind === "phone" ? "phone" : "pc", ip, port: DEFAULT_PORT, securePort: h.securePort });
               }
             })
           );
@@ -141,7 +142,11 @@ function createDiscovery({ self, onChange }) {
     } catch {
       browser = browser || { stop() {}, update() {} };
     }
-    if (doSweep) sweep();
+    if (doSweep) {
+      sweep();
+      // Ask again shortly: the first question is easy to miss on Wi-Fi.
+      setTimeout(() => browser?.update?.(), 3000);
+    }
     emit();
   }
 
