@@ -110,6 +110,60 @@ export function SignalIcon(props) {
   );
 }
 
+export function PhotoIcon(props) {
+  return (
+    <Icon {...props}>
+      <Rect x="3" y="4" width="18" height="16" rx="2" />
+      <Circle cx="9" cy="10" r="2" />
+      <Path d="M21 16l-5-5-9 9" />
+    </Icon>
+  );
+}
+
+export function ClipboardIcon(props) {
+  return (
+    <Icon {...props}>
+      <Rect x="6" y="4" width="12" height="17" rx="2" />
+      <Path d="M9 4V2.8h6V4M9 10h6M9 14h4" />
+    </Icon>
+  );
+}
+
+export function DownloadIcon(props) {
+  return (
+    <Icon {...props}>
+      <Path d="M12 4v12M7 11l5 5 5-5M5 20h14" />
+    </Icon>
+  );
+}
+
+export function TrashIcon(props) {
+  return (
+    <Icon {...props}>
+      <Path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+    </Icon>
+  );
+}
+
+/** The paper plane from the app icon, for the brand mark. */
+export function PlaneIcon(props) {
+  return (
+    <Icon {...props}>
+      <Path d="M3.5 11.5L20.5 4l-4.6 16.5-4.3-5.4z" />
+      <Path d="M11.6 15.1L20.5 4" />
+    </Icon>
+  );
+}
+
+export function PcIcon(props) {
+  return (
+    <Icon {...props}>
+      <Rect x="3" y="4" width="18" height="12" rx="2" />
+      <Path d="M8 20h8M12 16v4" />
+    </Icon>
+  );
+}
+
 export const CATEGORY_ICONS = {
   file: { Icon: FileIcon, color: "#7B6BE8" },
   media: { Icon: MediaIcon, color: "#F0784F" },

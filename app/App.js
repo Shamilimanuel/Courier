@@ -10,8 +10,6 @@ import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
 import { getDevices, getActiveDeviceId, setActiveDeviceId } from "./src/lib/pairing";
 import PairScreen from "./src/screens/PairScreen";
 import HomeScreen from "./src/screens/HomeScreen";
-import SyncScreen from "./src/screens/SyncScreen";
-import TransferScreen from "./src/screens/TransferScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ShareScreen from "./src/screens/ShareScreen";
 
@@ -22,7 +20,6 @@ function Root() {
   const [devices, setDevices] = useState([]);
   const [activeDeviceId, setActiveId] = useState(null);
   const [screen, setScreen] = useState("pair");
-  const [transferCategory, setTransferCategory] = useState(null);
 
   useEffect(() => {
     Promise.all([getDevices(), getActiveDeviceId()]).then(([list, activeId]) => {
@@ -57,8 +54,7 @@ function Root() {
     }
   }
 
-  function handleNavigate(target, category) {
-    if (target === "transfer") setTransferCategory(category);
+  function handleNavigate(target) {
     setScreen(target);
   }
 
@@ -90,18 +86,6 @@ function Root() {
 
   if (screen === "pair" || !activeDevice) {
     return <PairScreen onPaired={handlePaired} onBack={devices.length ? () => setScreen("home") : undefined} />;
-  }
-  if (screen === "text") {
-    return <SyncScreen pairing={activeDevice} onBack={() => setScreen("home")} />;
-  }
-  if (screen === "transfer") {
-    return (
-      <TransferScreen
-        category={transferCategory}
-        pairing={activeDevice}
-        onBack={() => setScreen("home")}
-      />
-    );
   }
   if (screen === "settings") {
     return (
