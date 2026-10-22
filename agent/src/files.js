@@ -4,7 +4,11 @@ const os = require("os");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const STAGING_DIR = path.join(__dirname, "..", "tmp");
+// Half-received uploads wait in the system's temp folder, never next to this
+// code: inside the desktop app's package (app.asar) a folder can't be made at
+// all, which crashed the app at start-up (ENOTDIR, 22 Oct), and an install
+// under Program Files couldn't be written to.
+const STAGING_DIR = process.env.COURIER_STAGING_DIR || path.join(os.tmpdir(), "courier-staging");
 const DEST_DIR = path.join(os.homedir(), "Downloads", "Courier");
 
 fs.mkdirSync(STAGING_DIR, { recursive: true });
@@ -17,6 +21,18 @@ const upload = multer({
   }),
   limits: { fileSize: 8 * 1024 * 1024 * 1024 }, // 8 GB ceiling, not a real target size
 });
+
+/** Moves a finished upload into place. rename can't cross drives (a download
+ * folder on D:, staging on C:), so then it copies and removes the staged copy. */
+function moveFile(from, to, cb) {
+  fs.rename(from, to, (err) => {
+    if (!err || err.code !== "EXDEV") return cb(err);
+    fs.copyFile(from, to, (copyErr) => {
+      if (copyErr) return cb(copyErr);
+      fs.unlink(from, () => cb(null));
+    });
+  });
+}
 
 /** "photo.jpg" -> "photo (1).jpg", "photo (2).jpg", ... — first name not already on disk. */
 function nextAvailableName(dir, name) {
@@ -128,7 +144,7 @@ function registerFileRoutes(app, requireAuth, { destDir = DEST_DIR, onFileReceiv
     }
     const finalPath = path.join(destDir, finalName);
 
-    fs.rename(stagedPath, finalPath, (err) => {
+    moveFile(stagedPath, finalPath, (err) => {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
