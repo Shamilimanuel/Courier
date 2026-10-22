@@ -26,8 +26,10 @@ In PowerShell on the PC you want to turn into a stop:
 irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1 | iex
 ```
 
-Installs the desktop app from the newest release, quietly and just for you
-(no administrator rights), and opens it. After that, `courier` in PowerShell,
+Opens the Courier setup window (made like Reveille's): get the phone app,
+install the desktop app from the newest release, quietly and just for you
+(no administrator rights), and pair. Without a desktop, or with `-Console`,
+it is the same in text. After that, `courier` in PowerShell,
 cmd or Win+R opens the window; running the line again (or `courier -Setup`)
 gives a menu to update, open or remove it. A PC that had the older
 window-less agent keeps its pairing token. That agent is still available:

@@ -65,9 +65,13 @@ jobs:
           # other two racing against it are expected to fail this specific
           # command, which is fine — every job uploads its own files below
           # regardless of who won the create.
+          # --latest=false: "latest" must stay the phone app's release, since
+          # the app's update check and every releases/latest/download/
+          # courier.apk link (README, QR codes, setup window) go there.
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Courier Desktop $TAG" \
+            --latest=false \
             --notes "Desktop app built from \`${GITHUB_SHA:0:7}\`. Download the file for your OS below. macOS/Linux builds are unsigned — see the README for the first-launch step." \
             2>/dev/null || true
 
