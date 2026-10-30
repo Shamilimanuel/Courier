@@ -60,7 +60,7 @@ In PowerShell on the PC you want to turn into a stop:
 irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1 | iex
 ```
 
-Opens the Courier setup window (made like Reveille's): get the phone app,
+Opens the Courier setup window (made like [Reveille](https://github.com/Shamilimanuel/PCRemote)'s): get the phone app,
 install the desktop app from the newest release, quietly and just for you
 (no administrator rights), and pair. Without a desktop, or with `-Console`,
 it is the same in text. After that, `courier` in PowerShell,
@@ -144,10 +144,7 @@ paired breaks: the plain port keeps working exactly as before.
 
 Pushing to `main` with changes under `app/**` triggers
 `.github/workflows/android.yml`, which builds a signed APK and publishes it
-as a GitHub Release. The signing keystore lives in `secrets/` (gitignored,
-kept off GitHub, with a backup) and in GitHub's encrypted secrets — see
-`secrets/READ-ME-FIRST.txt`. **Losing every copy means never being able to
-update the installed app again.**
+as a GitHub Release. Release builds are signed; the signing key is kept private.
 
 ## Status
 
