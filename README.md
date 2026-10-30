@@ -1,11 +1,45 @@
 # Courier
 
-Send text, clipboard, and files between your devices over your own Wi-Fi —
-no cloud, no account. Pair as many PCs as you want (a desktop, a laptop,
-a second laptop) — each one is a **stop**. Phone → PC and PC → phone
-both work directly; phone → phone and PC → PC route through a stop both
-devices already trust, since a phone can't run the receiving side itself
-(yet).
+**Send text, the clipboard and files between your own devices over your own Wi-Fi: no cloud, no account.**
+
+Pair as many PCs as you want (a desktop, a laptop, a second laptop): each one is a **stop**. Phone → PC and
+PC → phone both work directly; phone → phone and PC → PC route through a stop both devices already trust, since a
+phone can't run the receiving side itself (yet).
+
+<p align="center">
+  <img src="docs/screenshots/send.png" alt="Courier's Send tab: drop files, send the clipboard or some text to a paired PC" width="32%">
+  <img src="docs/screenshots/sending.png" alt="Several files being sent at once, each with its own Cancel button" width="32%">
+  <img src="docs/screenshots/receive.png" alt="The Receive tab: files that arrived on this PC, and files waiting on another stop" width="32%">
+</p>
+
+<sub>The screenshots show made-up files and device names.</sub>
+
+## What it does
+
+- **Files, text and the clipboard** go straight from one device to another over your home network. Nothing is
+  uploaded to a server.
+- **Several PCs at once.** Every PC you pair becomes a chip with a live online/offline dot.
+- **Desktop app** (Windows, macOS, Linux) with a tray icon, multi-file sends with per-file cancel and retry,
+  duplicate handling, a transfer history with resend, a choosable download folder and a notification when a file lands.
+- **Send with Courier** in the Windows right-click menu.
+- **Phone app** (Android) with QR pairing, a Receive tab, and progress, speed and time left while sending.
+- **No install on the sending side** if you don't want one: open `http://<pc-ip>:<port>/pair` in any browser on the
+  same Wi-Fi and drop a file on it.
+- **Encrypted between PCs** with a certificate pinned when you pair (see [Encryption](#encryption)).
+
+## Install
+
+On Windows, paste this into PowerShell:
+
+```
+irm github.com/Shamilimanuel/Courier/raw/main/setup.ps1 | iex
+```
+
+It opens the Courier setup window. On the phone, download the newest Android app from the
+[Releases page](https://github.com/Shamilimanuel/Courier/releases/latest). More ways to run it (by hand, from source, a
+text-only agent) are under [Running it](#running-it).
+
+## Layout
 
 ```
 Courier/
@@ -111,7 +145,7 @@ paired breaks: the plain port keeps working exactly as before.
 Pushing to `main` with changes under `app/**` triggers
 `.github/workflows/android.yml`, which builds a signed APK and publishes it
 as a GitHub Release. The signing keystore lives in `secrets/` (gitignored,
-backed up by OneDrive) and in GitHub's encrypted secrets — see
+kept off GitHub, with a backup) and in GitHub's encrypted secrets — see
 `secrets/READ-ME-FIRST.txt`. **Losing every copy means never being able to
 update the installed app again.**
 
@@ -149,3 +183,21 @@ update the installed app again.**
       its own server, foreground service + native TCP module, opt-in
       (bigger lift, in progress)
 - [ ] Automatic device discovery (mDNS) — pairing is still QR/manual-IP only
+
+## Privacy
+
+- Courier has **no account and no server of its own**. Your devices talk to each other on your network; nothing is
+  sent to the developer or to any cloud.
+- Each PC makes its **own pairing token** the first time it starts (it is stored in `agent/config.json`, which is
+  gitignored). Every install is independent. Sending, receiving and the clipboard all need that token.
+- **Honest limit:** the browser pairing page (`/pair`) is open to anyone on the same Wi-Fi and shows the token, so
+  Courier is meant for a home or other network you trust. Don't run it on a public or shared Wi-Fi.
+- Between PCs the traffic is HTTPS with a pinned certificate; the phone app still uses plain HTTP on your Wi-Fi for
+  now (see [Encryption](#encryption)).
+- Files you receive land in the download folder you chose on that PC.
+
+## Licence
+
+[MIT](LICENSE). Use it, change it, ship it; just keep the copyright line.
+
+More projects: https://github.com/Shamilimanuel

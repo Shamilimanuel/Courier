@@ -28,4 +28,5 @@ status.md
 *.pdf
 
 # Prototype pages (published as artifacts, not part of the app)
-docs/
+docs/*
+!docs/screenshots/
